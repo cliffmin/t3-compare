@@ -12,7 +12,9 @@ export type CompareColumnStatus =
   | "completed"
   | "interrupted"
   | "error"
-  | "missing";
+  | "missing"
+  /** The request never started a thread, so there is nothing to subscribe to. */
+  | "not-started";
 
 /**
  * What one column reports while its thread runs on its own worktree.
@@ -66,4 +68,5 @@ export const COMPARE_COLUMN_STATUS_LABEL: Record<CompareColumnStatus, string> = 
   interrupted: "Stopped",
   error: "Failed",
   missing: "Deleted",
+  "not-started": "Never started",
 };

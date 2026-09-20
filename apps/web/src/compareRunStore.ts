@@ -16,9 +16,17 @@ const COMPARE_RUN_STORAGE_VERSION = 1;
  * remain in the sidebar either way.
  */
 const CompareRunEntrySchema = Schema.Struct({
-  threadId: ThreadId,
+  /**
+   * The thread this provider is answering in, or null when its request
+   * never started one. A provider that failed to launch is a result of the
+   * comparison, not an omission from it — dropping it would leave the grid
+   * quietly narrower than the set of providers that were asked.
+   */
+  threadId: Schema.NullOr(ThreadId),
   instanceId: ProviderInstanceId,
   model: Schema.String,
+  /** Why the request never started. Only set when `threadId` is null. */
+  startError: Schema.optionalKey(Schema.String),
 });
 export type CompareRunEntry = typeof CompareRunEntrySchema.Type;
 

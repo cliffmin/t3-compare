@@ -2,9 +2,11 @@ import { describe, expect, it } from "vite-plus/test";
 import { MessageId, type OrchestrationMessage } from "@t3tools/contracts";
 
 import {
+  COMPARE_COLUMN_STATUS_LABEL,
   isCompareColumnPending,
   resolveCompareColumnStatus,
   selectAnswerMessages,
+  type CompareColumnStatus,
 } from "./compareColumn.logic";
 
 function message(overrides: Partial<OrchestrationMessage>): OrchestrationMessage {
@@ -69,6 +71,24 @@ describe("compare column status", () => {
         sessionStatus: null,
       }),
     ).toBe("loading");
+  });
+});
+
+describe("compare column labels", () => {
+  it("labels every status, including a provider that never started", () => {
+    const statuses: ReadonlyArray<CompareColumnStatus> = [
+      "loading",
+      "running",
+      "completed",
+      "interrupted",
+      "error",
+      "missing",
+      "not-started",
+    ];
+    for (const status of statuses) {
+      expect(COMPARE_COLUMN_STATUS_LABEL[status]).toBeTruthy();
+    }
+    expect(COMPARE_COLUMN_STATUS_LABEL["not-started"]).toBe("Never started");
   });
 });
 

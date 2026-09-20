@@ -7929,10 +7929,14 @@ export default function ChatView(props: ChatViewProps) {
     );
     if (multipleModelSelections !== null) {
       const failedSelections: ModelSelection[] = [];
-      // Threads that actually started, in the order their requests settled.
-      // A failed selection is simply absent: the compare grid only ever
-      // shows columns backed by a live thread.
-      const startedEntries: CompareRunEntry[] = [];
+      // One slot per selected provider, indexed by its position in the
+      // picker rather than by the order requests happen to settle, so the
+      // compare grid's columns stay in the order the user chose them. A
+      // provider whose request never started records a null thread and its
+      // reason: that is a result of the comparison, not an omission.
+      const attemptedEntries: Array<CompareRunEntry | null> = new Array(
+        multipleTargets.length,
+      ).fill(null);
       let clearedDraft = false;
       let releasedComposer = false;
       let canRestoreDraft = () => false;
@@ -7969,7 +7973,7 @@ export default function ChatView(props: ChatViewProps) {
           multipleModelSelectionsRef.current === submittedSelections;
         setThreadError(threadIdForSend, null);
         const starts = Promise.all(
-          multipleTargets.map(async (target) => {
+          multipleTargets.map(async (target, targetIndex) => {
             const retryKey = JSON.stringify([
               routeThreadKey,
               target.selection.instanceId,
@@ -8040,12 +8044,19 @@ export default function ChatView(props: ChatViewProps) {
                 throw error;
               }
               startedCount += 1;
-              startedEntries.push({
+              attemptedEntries[targetIndex] = {
                 threadId: targetThreadId,
                 instanceId: target.selection.instanceId,
                 model: target.selection.model,
-              });
+              };
             } catch (error) {
+              attemptedEntries[targetIndex] = {
+                threadId: null,
+                instanceId: target.selection.instanceId,
+                model: target.selection.model,
+                startError:
+                  error instanceof Error ? error.message : "The request could not be sent.",
+              };
               if (requestMayHaveStarted && !uncertainMultipleSubmissionsRef.current.has(retryKey)) {
                 uncertainMultipleSubmissionsRef.current.set(retryKey, targetThreadId);
               }
@@ -8107,17 +8118,21 @@ export default function ChatView(props: ChatViewProps) {
         resetLocalDispatch();
         releasedComposer = true;
         await starts;
-        if (startedEntries.length > 1) {
-          // Two or more providers answering the same prompt is what the grid
-          // exists to show. A lone survivor is just a background thread, so it
-          // keeps the toast rather than opening a one-column comparison.
+        const recordedEntries = attemptedEntries.filter(
+          (candidate): candidate is CompareRunEntry => candidate !== null,
+        );
+        if (startedCount > 0 && recordedEntries.length > 1) {
+          // The grid opens whenever more than one provider was asked and at
+          // least one is answering; providers that failed to start show as
+          // their own columns. When nothing started there is no comparison
+          // to show, so the draft is restored below and keeps its toast.
           const runId = newCompareRunId();
           useCompareRunStore.getState().recordRun({
             id: runId,
             createdAt: new Date().toISOString(),
             environmentId,
             prompt: messageTextForSend,
-            entries: startedEntries,
+            entries: recordedEntries,
           });
           void navigate({ to: "/compare/$runId", params: { runId } });
         } else if (startedCount > 0) {
