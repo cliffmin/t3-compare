@@ -2353,6 +2353,46 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("records every base ref when worktrees are created concurrently", () =>
+      Effect.gen(function* () {
+        // One prompt fanned out across providers creates a worktree per
+        // provider against the same repository at the same moment. Each
+        // records its base ref with `git config`, which takes a lockfile
+        // and fails instead of queueing, so without retrying contention
+        // every writer but one is left with an orphaned worktree and a
+        // thread that never starts.
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const pathService = yield* Path.Path;
+        const worktreeRoot = yield* makeTmpDir("git-worktrees-");
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        // Enough writers that their `git config` calls overlap: worktree
+        // creation itself staggers them, so a smaller fan-out can finish
+        // without ever contending and prove nothing.
+        const names = Array.from({ length: 12 }, (_, index) => `w${index}`);
+
+        yield* Effect.forEach(
+          names,
+          (name) =>
+            driver.createWorktree({
+              cwd,
+              path: pathService.join(worktreeRoot, name),
+              refName: initialBranch,
+              newRefName: `feature/${name}`,
+              baseRefName: initialBranch,
+            }),
+          { concurrency: "unbounded" },
+        );
+
+        for (const name of names) {
+          assert.equal(
+            yield* git(cwd, ["config", "--get", `branch.feature/${name}.gh-merge-base`]),
+            initialBranch,
+          );
+        }
+      }),
+    );
+
     it.effect("reports checkout progress during parallel worktree creation", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();

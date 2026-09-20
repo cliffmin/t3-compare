@@ -12,6 +12,7 @@ import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
@@ -41,6 +42,17 @@ import { ServerConfig } from "../config.ts";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const gitProcesses = Semaphore.makeUnsafe(8);
+/**
+ * `git config` takes a lockfile on the repository config and fails outright
+ * rather than queueing behind it, so writers that arrive together all lose
+ * but one. Worktrees created in parallel — one prompt fanned out across
+ * providers — each record their base ref at the same moment, which is
+ * enough contention to strand most of them. Serializing the write removes
+ * the contention this process creates; the retry at the call site covers a
+ * git running outside it. The writes are sub-millisecond, so one permit
+ * across repositories costs nothing worth keying a map for.
+ */
+const gitConfigWrites = Semaphore.makeUnsafe(1);
 // `git worktree add` checks out the full tree, so on large repositories it can
 // take well beyond the default 30s (e.g. a 375k-file repo takes ~40s on an idle
 // machine). Give it generous headroom while still bounding a genuinely hung git.
@@ -3143,7 +3155,21 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         "config",
         `branch.${input.newRefName}.gh-merge-base`,
         baseBranch,
-      ]);
+      ]).pipe(
+        // Retried because a git outside this process — the user's own
+        // terminal, a second environment — can hold the config lock too,
+        // and the write is idempotent. Retrying on any failure rather than
+        // matching git's lock message, which is localized and not pinned
+        // to `C` here. Jitter matters: contenders fail together, so an
+        // unjittered delay marches them into the next collision in step.
+        Effect.retry({
+          times: 5,
+          schedule: Schedule.exponential(Duration.millis(25)).pipe(Schedule.jittered),
+        }),
+        // Retry alone is not enough when this process is itself the
+        // contention: a wide fan-out still exhausts its attempts.
+        gitConfigWrites.withPermit,
+      );
     }
 
     return {
