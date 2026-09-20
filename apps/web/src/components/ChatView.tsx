@@ -304,6 +304,7 @@ import {
   useComposerDraftStore,
   DraftId,
 } from "../composerDraftStore";
+import { newCompareRunId, useCompareRunStore, type CompareRunEntry } from "../compareRunStore";
 import {
   formatTerminalContextLabel,
   type TerminalContextDraft,
@@ -7928,6 +7929,10 @@ export default function ChatView(props: ChatViewProps) {
     );
     if (multipleModelSelections !== null) {
       const failedSelections: ModelSelection[] = [];
+      // Threads that actually started, in the order their requests settled.
+      // A failed selection is simply absent: the compare grid only ever
+      // shows columns backed by a live thread.
+      const startedEntries: CompareRunEntry[] = [];
       let clearedDraft = false;
       let releasedComposer = false;
       let canRestoreDraft = () => false;
@@ -8035,6 +8040,11 @@ export default function ChatView(props: ChatViewProps) {
                 throw error;
               }
               startedCount += 1;
+              startedEntries.push({
+                threadId: targetThreadId,
+                instanceId: target.selection.instanceId,
+                model: target.selection.model,
+              });
             } catch (error) {
               if (requestMayHaveStarted && !uncertainMultipleSubmissionsRef.current.has(retryKey)) {
                 uncertainMultipleSubmissionsRef.current.set(retryKey, targetThreadId);
@@ -8097,7 +8107,20 @@ export default function ChatView(props: ChatViewProps) {
         resetLocalDispatch();
         releasedComposer = true;
         await starts;
-        if (startedCount > 0) {
+        if (startedEntries.length > 1) {
+          // Two or more providers answering the same prompt is what the grid
+          // exists to show. A lone survivor is just a background thread, so it
+          // keeps the toast rather than opening a one-column comparison.
+          const runId = newCompareRunId();
+          useCompareRunStore.getState().recordRun({
+            id: runId,
+            createdAt: new Date().toISOString(),
+            environmentId,
+            prompt: messageTextForSend,
+            entries: startedEntries,
+          });
+          void navigate({ to: "/compare/$runId", params: { runId } });
+        } else if (startedCount > 0) {
           toastManager.add(
             stackedThreadToast({
               type: "success",
