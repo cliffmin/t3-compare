@@ -27,7 +27,8 @@ Use **Open thread** to continue an answer, stop it, or handle an approval.
 Turn **Compare** off to return to normal mode without changing the prompt or
 your normal model settings. Toggling back on restores the comparison choices
 while this draft stays open. It does not stop comparisons already running.
-Expand a comparison in the sidebar to reopen its provider conversations. The
+Expand a comparison in the sidebar to reopen its provider conversations. Sessions
+in another pinned, snoozed, or settled section keep their existing locations. The
 parent opens the original answers; continuing a provider conversation does not
 replace them. A completed merge adds an output link with the number of answers
 actually included. Groups and saved outputs are stored on this client, so they

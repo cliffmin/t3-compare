@@ -1,3 +1,4 @@
+import { comparisonSidebarGroups } from "../comparisonSidebar";
 import { useCompareRunStore } from "../compareRunStore";
 import { ComparisonSnapshots } from "./ComparisonSnapshots";
 import { ComparisonGroup } from "./ComparisonGroup";
@@ -4835,66 +4836,38 @@ export default function Sidebar() {
                           onNavigateToDraft={navigateToDraft}
                         />,
                       ];
-                      const groups = comparisonRuns.filter(
-                        (run) =>
-                          scopedProjectKeys === null ||
-                          (run.projectId &&
-                            scopedProjectKeys.has(`${run.environmentId}:${run.projectId}`)) ||
-                          run.entries.some((entry) =>
-                            threads.some(
-                              (thread) =>
-                                thread.environmentId === run.environmentId &&
-                                thread.id === entry.threadId &&
-                                scopedProjectKeys.has(
-                                  `${thread.environmentId}:${thread.projectId}`,
-                                ),
-                            ),
-                          ),
+                      const { byThread: groupByThread } = comparisonSidebarGroups(
+                        comparisonRuns,
+                        sidebarListItems,
                       );
-                      const groupByThread = new Map<string, (typeof groups)[number]>();
-                      for (const run of groups) {
-                        for (const id of [
-                          ...run.entries.map((entry) => entry.threadId),
-                          ...(run.merges ?? [])
-                            .filter((merge) => merge.output)
-                            .map((merge) => merge.threadId),
-                        ]) {
-                          if (id)
-                            groupByThread.set(
-                              scopedThreadKey(scopeThreadRef(run.environmentId, id)),
-                              run,
-                            );
-                        }
-                      }
-                      const renderedGroups = new Set<string>();
-                      const renderGroup = (run: (typeof groups)[number]) => {
-                        renderedGroups.add(run.id);
+                      const renderGroup = (
+                        group: NonNullable<ReturnType<typeof groupByThread.get>>,
+                      ) => {
+                        const { run } = group;
                         return (
-                          <ComparisonGroup key={run.id} run={run} threads={threads}>
+                          <ComparisonGroup
+                            key={run.id}
+                            run={run}
+                            threads={threads}
+                            output={group.output}
+                          >
                             {run.entries.map((entry) => {
                               const key = entry.threadId
                                 ? scopedThreadKey(scopeThreadRef(run.environmentId, entry.threadId))
                                 : null;
+                              if (key && !group.groupedKeys.has(key)) return null;
                               const item = sidebarListItems.find(
                                 (row) => row.kind === "thread" && row.key === key,
                               );
                               const thread = key ? threadByKey.get(key) : undefined;
                               if (thread && item?.kind === "thread")
                                 return renderThreadRow(thread, item.section);
-                              // Keep lifecycle shelves authoritative: hidden/snoozed sessions
-                              // stay hidden; genuinely absent sessions retain an honest label.
-                              const exists = threads.some(
-                                (thread) =>
-                                  thread.environmentId === run.environmentId &&
-                                  thread.id === entry.threadId,
-                              );
-                              return !exists ? (
+                              return entry.threadId === null ? (
                                 <li
-                                  key={key ?? `${run.id}:${entry.instanceId}`}
+                                  key={`${run.id}:${entry.instanceId}`}
                                   className="px-2 py-2 text-xs text-muted-foreground"
                                 >
-                                  {entry.instanceId} ·{" "}
-                                  {entry.threadId ? "Session unavailable" : "Failed to start"}
+                                  {entry.instanceId} · Failed to start
                                 </li>
                               ) : null;
                             })}
@@ -4905,7 +4878,7 @@ export default function Sidebar() {
                         if (item.kind === "thread") {
                           const group = groupByThread.get(item.key);
                           if (group) {
-                            if (!renderedGroups.has(group.id)) items.push(renderGroup(group));
+                            if (item.key === group.anchorKey) items.push(renderGroup(group));
                           } else
                             items.push(renderThreadRow(threadByKey.get(item.key)!, item.section));
                           continue;
@@ -5009,8 +4982,6 @@ export default function Sidebar() {
                             break;
                         }
                       }
-                      for (const run of groups)
-                        if (!renderedGroups.has(run.id)) items.push(renderGroup(run));
                       return items;
                     })()}
                     {settledShelfExpanded && hiddenSettledCount > 0 ? (

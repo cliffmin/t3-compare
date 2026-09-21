@@ -1,5 +1,6 @@
+import { useComparisonMergeDraft } from "../useComparisonMergeDraft";
 import { useMemo, useRef, useState } from "react";
-import type { ModelSelection, ProjectId, ThreadId } from "@t3tools/contracts";
+import type { ProjectId, ThreadId } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
@@ -9,7 +10,6 @@ import { useCompareRunStore, type CompareMerge, type CompareRun } from "../compa
 import {
   selectMergeSources,
   buildMergePrompt,
-  DEFAULT_MERGE_INSTRUCTIONS,
   labelMergeCitations,
   readMergeInput,
   type MergeSource,
@@ -73,11 +73,8 @@ export function CompareMergeView({
       search: { tab: "merged", merge: threadId },
     });
   };
-  const [chosen, setChosen] = useState<ModelSelection | null>(latestMerge?.modelSelection ?? null);
-  const [instructions, setInstructions] = useState(
-    latestMerge?.instructions ?? DEFAULT_MERGE_INSTRUCTIONS,
-  );
-  const [direction, setDirection] = useState(latestMerge?.direction ?? "");
+  const { chosen, setChosen, instructions, setInstructions, direction, setDirection } =
+    useComparisonMergeDraft(merge);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);

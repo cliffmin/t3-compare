@@ -5052,6 +5052,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           size="sm"
           aria-label="Compare providers"
           checked={multipleModelSelections !== null}
+          aria-checked={multipleModelSelections !== null}
           disabled={
             providerCatalogPending ||
             isSendBusy ||

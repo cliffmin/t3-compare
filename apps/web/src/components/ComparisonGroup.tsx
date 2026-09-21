@@ -2,17 +2,19 @@ import { useEffect, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import { useCompareRunStore, type CompareRun } from "../compareRunStore";
+import { useCompareRunStore, type CompareRun, type CompareMerge } from "../compareRunStore";
 import { comparisonFallbackTitle } from "../compareColumn.logic";
 
 export function ComparisonGroup({
   run,
   threads,
   children,
+  output,
 }: {
   run: CompareRun;
   threads: ReadonlyArray<EnvironmentThreadShell>;
   children: ReactNode;
+  output: CompareMerge | undefined;
 }) {
   const first = run.entries.flatMap((entry) => {
     const thread = threads.find(
@@ -22,7 +24,6 @@ export function ComparisonGroup({
   })[0];
   const generatedTitle =
     !run.title && first?.titleState?.source === "generated" ? first.title : undefined;
-  const output = run.merges?.findLast((merge) => merge.output !== undefined);
   const outputThread = threads.find(
     (thread) => thread.environmentId === run.environmentId && thread.id === output?.threadId,
   );
