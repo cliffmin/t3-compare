@@ -11,6 +11,10 @@ const {
   hasSwitchMock,
   registerSchemesMock,
   setDesktopNameMock,
+  setPathMock,
+  setNameMock,
+  requestLockMock,
+  exitMock,
   mkdirSyncMock,
   writeFileSyncMock,
 } = vi.hoisted(() => ({
@@ -19,6 +23,10 @@ const {
   hasSwitchMock: vi.fn(),
   registerSchemesMock: vi.fn(),
   setDesktopNameMock: vi.fn(),
+  setPathMock: vi.fn(),
+  setNameMock: vi.fn(),
+  requestLockMock: vi.fn(() => true),
+  exitMock: vi.fn(),
   mkdirSyncMock: vi.fn(),
   writeFileSyncMock: vi.fn(),
 }));
@@ -26,6 +34,11 @@ const {
 vi.mock("electron", () => ({
   app: {
     setDesktopName: setDesktopNameMock,
+    setPath: setPathMock,
+    setName: setNameMock,
+    requestSingleInstanceLock: requestLockMock,
+    exit: exitMock,
+    getPath: () => "/tmp/app-data",
     getVersion: () => "0.0.37",
     commandLine: {
       appendSwitch: appendSwitchMock,
@@ -53,8 +66,51 @@ describe("DesktopPreReadyPlatform", () => {
     hasSwitchMock.mockReset();
     registerSchemesMock.mockReset();
     setDesktopNameMock.mockReset();
+    setPathMock.mockReset();
+    setNameMock.mockReset();
+    requestLockMock.mockReset().mockReturnValue(true);
+    exitMock.mockReset();
     mkdirSyncMock.mockReset();
     writeFileSyncMock.mockReset();
+  });
+
+  it.effect("isolates Chromium storage before asynchronous startup", () => {
+    vi.stubEnv("VITE_DEV_SERVER_URL", "");
+    vi.stubEnv("T3COMPARE_PROFILE_DIR", "");
+    return Effect.gen(function* () {
+      yield* DesktopPreReadyPlatform.DesktopPreReadyElectronOptions;
+      assert.deepEqual(setPathMock.mock.calls, [
+        ["userData", "/tmp/app-data/t3compare"],
+        ["sessionData", "/tmp/app-data/t3compare"],
+      ]);
+      assert.deepEqual(setNameMock.mock.calls, [["T3 Compare"]]);
+    }).pipe(
+      Effect.provide(
+        DesktopPreReadyPlatform.layer.pipe(
+          Layer.provide(Layer.succeed(HostProcessPlatform, "darwin")),
+        ),
+      ),
+    );
+  });
+
+  it.effect("exits a secondary macOS instance before later services can start", () => {
+    requestLockMock.mockImplementation(() => {
+      assert.deepEqual(
+        setPathMock.mock.calls.map(([name]) => name),
+        ["userData", "sessionData"],
+      );
+      return false;
+    });
+    return Effect.gen(function* () {
+      yield* DesktopPreReadyPlatform.DesktopPreReadyElectronOptions;
+      assert.deepEqual(exitMock.mock.calls, [[0]]);
+    }).pipe(
+      Effect.provide(
+        DesktopPreReadyPlatform.layer.pipe(
+          Layer.provide(Layer.succeed(HostProcessPlatform, "darwin")),
+        ),
+      ),
+    );
   });
 
   it.effect("preserves an explicit Linux password-store switch", () => {
@@ -103,8 +159,8 @@ describe("DesktopPreReadyPlatform", () => {
             const identity = yield* Effect.promise(() => portalIdentity);
             assert.equal(identity.desktopName, "com.t3tools.T3Code.desktop");
             assert.include(identity.desktopEntry ?? "", 'Exec="/Applications/current.AppImage" %U');
-            assert.include(identity.desktopEntry ?? "", "Name=T3 Code (Alpha)");
-            assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/t3code;");
+            assert.include(identity.desktopEntry ?? "", "Name=T3 Compare");
+            assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/t3compare;");
           }),
         ).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())));
       },
@@ -113,8 +169,8 @@ describe("DesktopPreReadyPlatform", () => {
 
   it.effect("keeps startup available when the early desktop entry cannot be written", () => {
     getSwitchValueMock.mockReturnValue("");
-    mkdirSyncMock.mockImplementation(() => {
-      throw new Error("read-only filesystem");
+    mkdirSyncMock.mockImplementation((path: string) => {
+      if (path.endsWith("applications")) throw new Error("read-only filesystem");
     });
 
     return DesktopPreReadyPlatform.make.pipe(

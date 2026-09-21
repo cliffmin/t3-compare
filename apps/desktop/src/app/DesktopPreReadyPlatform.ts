@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Electron from "electron";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
+import { resolveDesktopProfilePath } from "./DesktopProfile.ts";
 import * as DesktopEarlyElectronStartup from "./DesktopEarlyElectronStartup.ts";
 import { resolveDesktopAppBranding } from "./DesktopEnvironment.ts";
 import { renderUrlHandlerDesktopEntry } from "./DesktopLinuxUrlHandler.ts";
@@ -52,6 +53,23 @@ export class DesktopPreReadyElectronOptions extends Context.Service<
 export const make = Effect.gen(function* () {
   const platform = yield* HostProcessPlatform;
   return yield* Effect.sync((): DesktopPreReadyElectronOptions["Service"] => {
+    const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL?.trim());
+    Electron.app.setName(isDevelopment ? "T3 Compare (Dev)" : "T3 Compare");
+    const profile = resolveDesktopProfilePath({
+      appDataDirectory: Electron.app.getPath("appData"),
+      isDevelopment,
+      override: process.env.T3COMPARE_PROFILE_DIR,
+      resolvePath: NodePath.resolve,
+    });
+    NodeFS.mkdirSync(profile, { recursive: true });
+    Electron.app.setPath("userData", profile);
+    Electron.app.setPath("sessionData", profile);
+    // Clerk manages this on Windows/Linux only. macOS also needs a lock for
+    // direct launches and `open -n`, before a second backend can be created.
+    if (platform === "darwin" && !Electron.app.requestSingleInstanceLock()) {
+      Electron.app.exit(0);
+      return { linux: null, linuxPasswordStoreCommandLine: null };
+    }
     const linuxPasswordStoreCommandLine =
       platform === "linux"
         ? readCommandLineSwitchValue(Electron.app.commandLine, "password-store")
