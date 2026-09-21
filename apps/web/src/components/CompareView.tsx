@@ -121,11 +121,9 @@ export function CompareView({
       </header>
 
       {/*
-        One horizontal scroller with fixed-basis columns, rather than a grid
-        that divides the viewport: past three or four providers equal shares
-        get too narrow to read a code block in, and the answer is the thing
-        being compared. Each column scrolls on its own so a verbose provider
-        cannot push the others' text out of view.
+        Columns share extra space but never shrink below their readable basis.
+        Smaller viewports scroll horizontally; each answer scrolls vertically
+        on its own so a verbose provider cannot push the others' text out of view.
       */}
       <div
         className={
@@ -206,7 +204,7 @@ function CompareColumnFrame({
 }) {
   const displayName = providerEntry?.displayName ?? instanceId;
   return (
-    <section className="flex min-h-0 w-[26rem] shrink-0 flex-col bg-background">
+    <section className="flex min-h-0 w-[26rem] grow shrink-0 flex-col bg-background">
       <div className="flex shrink-0 items-center gap-2 border-b border-border/70 px-3 py-2">
         {providerEntry ? (
           <ProviderInstanceIcon
