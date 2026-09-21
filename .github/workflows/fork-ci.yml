@@ -1,0 +1,117 @@
+name: Fork CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  push:
+    branches: [main, "feat/**", "fix/**", "codex/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality
+    if: github.repository == 'cliffmin/t3code'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check pull request title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          node --input-type=module <<'JS'
+          const title = process.env.PR_TITLE ?? '';
+          if (!/^(feat|fix|docs|test|refactor|perf|build|ci|chore|revert)(\([a-z0-9-]+\))?!?: \S.+$/.test(title)) {
+            console.error('Use a Conventional Commit title, e.g. feat(compare): preserve merge sources');
+            process.exit(1);
+          }
+          JS
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --frozen-lockfile
+      - name: Check formatting
+        run: vp fmt --check
+      - name: Lint
+        run: vp run lint
+      - name: Typecheck server, contracts, client runtime, and web
+        run: vp run --filter t3 --filter @t3tools/contracts --filter @t3tools/client-runtime --filter @t3tools/web typecheck
+      - name: Build web client
+        run: vp run --filter @t3tools/web build
+
+  web_tests:
+    name: Web tests
+    if: github.repository == 'cliffmin/t3code'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --frozen-lockfile
+      - name: Test web, contracts, and client runtime
+        run: vp run --filter @t3tools/web --filter @t3tools/contracts --filter @t3tools/client-runtime test
+
+  server_tests:
+    name: Server tests ${{ matrix.shard }}
+    if: github.repository == 'cliffmin/t3code'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --frozen-lockfile
+      - name: Test server
+        run: vp run --filter t3 test --shard ${{ matrix.shard }}/3
+
+  required:
+    name: Fork CI required
+    if: ${{ always() && github.repository == 'cliffmin/t3code' }}
+    needs: [quality, web_tests, server_tests]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every check to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'JS'
+          const jobs = JSON.parse(process.env.RESULTS);
+          for (const [name, job] of Object.entries(jobs)) {
+            if (job.result !== 'success') {
+              console.error(`${name}: ${job.result}`);
+              process.exitCode = 1;
+            }
+          }
+          JS
