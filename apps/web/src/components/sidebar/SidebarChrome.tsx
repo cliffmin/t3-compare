@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { memo, useCallback } from "react";
 import { Link, useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
 
+import { APP_BASE_NAME } from "../../branding";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { useEnvironments } from "../../state/environments";
@@ -96,7 +97,7 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
             onBackdrop ? "text-white/70" : "text-muted-foreground",
           )}
         >
-          Code
+          {APP_BASE_NAME.replace(/^T3 /, "")}
         </span>
       </span>
     </Link>
