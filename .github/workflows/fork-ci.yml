@@ -18,7 +18,7 @@ concurrency:
 jobs:
   quality:
     name: Quality
-    if: github.repository == 'cliffmin/t3code'
+    if: github.repository == 'cliffmin/t3-compare'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -55,7 +55,7 @@ jobs:
 
   web_tests:
     name: Web tests
-    if: github.repository == 'cliffmin/t3code'
+    if: github.repository == 'cliffmin/t3-compare'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -74,7 +74,7 @@ jobs:
 
   server_tests:
     name: Server tests ${{ matrix.shard }}
-    if: github.repository == 'cliffmin/t3code'
+    if: github.repository == 'cliffmin/t3-compare'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -97,7 +97,7 @@ jobs:
 
   required:
     name: Fork CI required
-    if: ${{ always() && github.repository == 'cliffmin/t3code' }}
+    if: ${{ always() && github.repository == 'cliffmin/t3-compare' }}
     needs: [quality, web_tests, server_tests]
     runs-on: ubuntu-24.04
     timeout-minutes: 2

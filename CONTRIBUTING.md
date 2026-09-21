@@ -14,6 +14,10 @@ of commits. Develop against isolated state, never the installed application's li
 
 ## Branches and commits
 
+Active development is private in `cliffmin/t3-compare`. Keep `origin` pointed there;
+the public `cliffmin/t3code` fork is a separate publication destination. Publishing
+the private work or changing repository visibility requires the owner's approval.
+
 - Branch from the fork's current `main` for each bounded change. Use `feat/`, `fix/`,
   or `codex/` prefixes. Preserve existing branches and uncommitted work.
 - Make each commit one coherent behavior change, with its tests. Keep unrelated cleanup
