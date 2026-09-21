@@ -24,7 +24,7 @@ import { threadEnvironment, useEnvironmentThread } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import {
   resolveCompareColumnStatus,
-  selectAnswerMessages,
+  originalComparisonTurn,
   COMPARE_COLUMN_STATUS_LABEL,
 } from "../compareColumn.logic";
 import { ProviderModelPicker } from "./chat/ProviderModelPicker";
@@ -50,8 +50,10 @@ export function CompareMergeView({
   included,
   setupOpen,
   onSetupOpenChange,
+  initialMergeId,
 }: {
   run: CompareRun;
+  initialMergeId?: string | undefined;
   entries: ReadonlyArray<ProviderInstanceEntry>;
   sources: ReadonlyArray<CompareSourceState>;
   included: Readonly<Record<string, boolean>>;
@@ -61,9 +63,16 @@ export function CompareMergeView({
   const settings = useEnvironmentSettings(run.environmentId);
   const navigate = useNavigate();
   const startTurn = useAtomCommand(threadEnvironment.startTurn, { reportFailure: false });
-  const latestMerge = run.merges?.at(-1);
-  const [mergeId, setMergeId] = useState<ThreadId | null>(latestMerge?.threadId ?? null);
-  const merge = run.merges?.find((item) => item.threadId === mergeId) ?? latestMerge;
+  const latestMerge =
+    run.merges?.find((merge) => merge.threadId === initialMergeId) ?? run.merges?.at(-1);
+  const merge = latestMerge;
+  const setMergeId = (threadId: ThreadId) => {
+    void navigate({
+      to: "/compare/$runId",
+      params: { runId: run.id },
+      search: { tab: "merged", merge: threadId },
+    });
+  };
   const [chosen, setChosen] = useState<ModelSelection | null>(latestMerge?.modelSelection ?? null);
   const [instructions, setInstructions] = useState(
     latestMerge?.instructions ?? DEFAULT_MERGE_INSTRUCTIONS,
@@ -99,23 +108,28 @@ export function CompareMergeView({
   const eligible = selectMergeSources(sources, included);
   const mergedThread = useEnvironmentThread(run.environmentId, merge?.threadId ?? null);
   const thread = Option.getOrNull(mergedThread.data);
-  const answer = selectAnswerMessages(thread?.messages ?? [])
-    .map((message) => message.text)
-    .join("\n\n");
+  const original = thread ? originalComparisonTurn(thread) : null;
+  const answer =
+    merge?.output?.answer ?? (original?.messages ?? []).map((message) => message.text).join("\n\n");
   const savedMergePrompt = thread?.messages.find((message) => message.role === "user")?.text ?? "";
-  const snapshot = useMemo(() => readMergeInput(savedMergePrompt), [savedMergePrompt]);
+  const parsedInput = useMemo(() => readMergeInput(savedMergePrompt), [savedMergePrompt]);
+  const snapshot = merge?.output ?? parsedInput;
   const text = useMemo(
     () => labelMergeCitations(answer, snapshot?.sources ?? []),
     [answer, snapshot],
   );
-  const status =
-    merge?.startError && !thread?.latestTurn
+  const originalState = original?.state;
+  const status = merge?.output
+    ? "completed"
+    : merge?.startError && !thread?.latestTurn
       ? "error"
-      : resolveCompareColumnStatus({
-          subscriptionStatus: mergedThread.status,
-          latestTurnState: thread?.latestTurn?.state ?? null,
-          sessionStatus: thread?.session?.status ?? null,
-        });
+      : originalState === "unverified"
+        ? "unverified"
+        : resolveCompareColumnStatus({
+            subscriptionStatus: mergedThread.status,
+            latestTurnState: originalState ?? null,
+            sessionStatus: thread?.session?.status ?? null,
+          });
   const busy = sending || (merge !== undefined && (status === "running" || status === "loading"));
   const citationSource = snapshot?.sources.find((source) =>
     source.passages.some((passage) => passage.id === passageId),
@@ -284,7 +298,7 @@ export function CompareMergeView({
             ) : null}
             {eligible.length < 2 ? (
               <span className="text-xs text-muted-foreground">
-                Include at least two completed answers in Original answers.
+                Include at least two completed answers in Compare.
               </span>
             ) : null}
           </div>

@@ -1,3 +1,4 @@
+import { Switch } from "../ui/switch";
 import { DESKTOP_PASTE_AS_TEXT_EVENT } from "../../lib/desktopPasteAsText";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { usePrimaryEnvironmentId } from "../../state/environments";
@@ -246,11 +247,7 @@ import {
 import { useEnvironmentQuery } from "~/state/query";
 import { useDebouncedValue } from "~/state/queries";
 import { ProviderModelPicker } from "./ProviderModelPicker";
-import {
-  selectComparisonModels,
-  updateComparisonSelection,
-  comparisonSelectionSummary,
-} from "../../compareProviders";
+import { selectComparisonModels, updateComparisonSelection } from "../../compareProviders";
 import {
   ComparisonProviderOptions,
   type ComparisonPickerConfig,
@@ -1046,6 +1043,7 @@ function useRestingComposerControlsLayout(host: HTMLDivElement | null) {
 }
 
 const ComposerFooterModeControls = memo(function ComposerFooterModeControls(props: {
+  comparisonControl?: ReactNode;
   showInteractionModeToggle: boolean;
   interactionMode: ProviderInteractionMode;
   runtimeMode: RuntimeMode;
@@ -1157,6 +1155,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
         <TooltipPopup side="top">{runtimeModeOption.description}</TooltipPopup>
       </Tooltip>
 
+      {props.comparisonControl}
       {interactionModeToggle}
     </>
   );
@@ -4921,38 +4920,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     size: "xs",
     hidden: composerControlsHidden || restingHiddenBlockCount > 1,
   });
-  const restingBlockDefs = [
-    ...(providerTraitsPicker
-      ? [
-          {
-            id: "traits",
-            content: (
-              <>
-                <ComposerControlSeparator size={composerControlsInStrip ? "xs" : "sm"} />
-                {composerControlsInStrip ? restingProviderTraitsPicker : providerTraitsPicker}
-              </>
-            ),
-          },
-        ]
-      : []),
-    {
-      id: "mode",
-      content: (
-        <ComposerFooterModeControls
-          showInteractionModeToggle={planModeUiEnabled}
-          interactionMode={interactionMode}
-          runtimeMode={runtimeMode}
-          size={composerControlsInStrip ? "xs" : "sm"}
-          hidden={composerControlsHidden || restingHiddenBlockCount > 0}
-          onToggleInteractionMode={toggleInteractionMode}
-          onRuntimeModeChange={handleRuntimeModeChange}
-        />
-      ),
-    },
-  ];
-  const hiddenRestingBlockIds = restingBlockDefs
-    .slice(restingBlockDefs.length - restingHiddenBlockCount)
-    .map((def) => def.id);
   const comparisonModels = useMemo(
     () =>
       routeKind === "draft" && supportsMultipleModels
@@ -5008,6 +4975,25 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       ? undefined
       : {
           selections: multipleModelSelections,
+          summarySelections: multipleModelSelections.map((selection) => {
+            const entry = providerInstanceEntries.find(
+              (item) => item.instanceId === selection.instanceId,
+            );
+            return entry
+              ? createModelSelection(
+                  selection.instanceId,
+                  selection.model,
+                  getComposerProviderState({
+                    provider: entry.driverKind,
+                    model: selection.model,
+                    models: entry.models,
+                    modelOptions: selection.options,
+                    promptInjectionState: composerPromptInjectionState,
+                    planModeEnabled: settings.planModeEnabled,
+                  }).modelOptionsForDispatch,
+                )
+              : selection;
+          }),
           canIncludeProvider: (instanceId) =>
             comparisonModels.some((selection) => selection.instanceId === instanceId),
           onToggleProvider: (instanceId) => {
@@ -5059,6 +5045,56 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       setIsComposerModelPickerOpen(true);
     }
   };
+  const comparisonControl =
+    routeKind === "draft" && supportsMultipleModels ? (
+      <label className="inline-flex shrink-0 items-center gap-1.5 px-1 text-xs text-muted-foreground">
+        <Switch
+          size="sm"
+          aria-label="Compare providers"
+          checked={multipleModelSelections !== null}
+          disabled={
+            providerCatalogPending ||
+            isSendBusy ||
+            (multipleModelSelections === null && comparisonModels.length < 2)
+          }
+          onCheckedChange={toggleComparison}
+        />
+        Compare
+      </label>
+    ) : null;
+  const restingBlockDefs = [
+    ...(providerTraitsPicker
+      ? [
+          {
+            id: "traits",
+            content: (
+              <>
+                <ComposerControlSeparator size={composerControlsInStrip ? "xs" : "sm"} />
+                {composerControlsInStrip ? restingProviderTraitsPicker : providerTraitsPicker}
+              </>
+            ),
+          },
+        ]
+      : []),
+    {
+      id: "mode",
+      content: (
+        <ComposerFooterModeControls
+          comparisonControl={comparisonControl}
+          showInteractionModeToggle={planModeUiEnabled}
+          interactionMode={interactionMode}
+          runtimeMode={runtimeMode}
+          size={composerControlsInStrip ? "xs" : "sm"}
+          hidden={composerControlsHidden || restingHiddenBlockCount > 0}
+          onToggleInteractionMode={toggleInteractionMode}
+          onRuntimeModeChange={handleRuntimeModeChange}
+        />
+      ),
+    },
+  ];
+  const hiddenRestingBlockIds = restingBlockDefs
+    .slice(restingBlockDefs.length - restingHiddenBlockCount)
+    .map((def) => def.id);
   const composerControls = showProviderUnavailable ? (
     <Button
       type="button"
@@ -5142,32 +5178,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         onOpenProviderSetup={onOpenProviderSetup}
       />
 
-      {routeKind === "draft" && supportsMultipleModels ? (
-        <Button
-          type="button"
-          size="xs"
-          variant={multipleModelSelections !== null ? "secondary" : "ghost"}
-          disabled={
-            providerCatalogPending ||
-            isSendBusy ||
-            (multipleModelSelections === null && comparisonModels.length < 2)
-          }
-          aria-pressed={multipleModelSelections !== null}
-          onClick={toggleComparison}
-        >
-          {multipleModelSelections !== null ? "Compare mode" : "Compare providers"}
-        </Button>
-      ) : null}
-
       {composerControlsCompact ? (
-        <CompactComposerControlsMenu
-          interactionMode={interactionMode}
-          runtimeMode={runtimeMode}
-          showInteractionModeToggle={planModeUiEnabled}
-          traitsMenuContent={multipleModelSelections === null ? providerTraitsMenuContent : null}
-          onToggleInteractionMode={toggleInteractionMode}
-          onRuntimeModeChange={handleRuntimeModeChange}
-        />
+        <>
+          <CompactComposerControlsMenu
+            interactionMode={interactionMode}
+            runtimeMode={runtimeMode}
+            showInteractionModeToggle={planModeUiEnabled}
+            traitsMenuContent={multipleModelSelections === null ? providerTraitsMenuContent : null}
+            onToggleInteractionMode={toggleInteractionMode}
+            onRuntimeModeChange={handleRuntimeModeChange}
+          />
+          {comparisonControl}
+        </>
       ) : (
         <>
           {restingBlockDefs.map((def, index) => {
@@ -5196,7 +5218,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               aria-hidden={hiddenRestingBlockIds.length === 0 || undefined}
               inert={hiddenRestingBlockIds.length === 0 || undefined}
               className={cn(
-                "min-w-0 shrink-0",
+                "flex min-w-0 shrink-0 items-center gap-1",
                 hiddenRestingBlockIds.length === 0 && "pointer-events-none invisible absolute",
               )}
             >
@@ -5214,6 +5236,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 onToggleInteractionMode={toggleInteractionMode}
                 onRuntimeModeChange={handleRuntimeModeChange}
               />
+              {hiddenRestingBlockIds.includes("mode") ? comparisonControl : null}
             </div>
           ) : null}
         </>
@@ -7004,22 +7027,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             <ComposerPromptLengthValidation
               message={providerInputSubmissionError ?? composerSubmissionError}
             />
-
-            {multipleModelSelections !== null ? (
-              <div
-                className="flex flex-wrap gap-x-4 gap-y-1 px-4 pb-2 text-xs text-muted-foreground"
-                aria-label="Comparison configuration"
-              >
-                {multipleModelSelections.map((selection) => (
-                  <span key={selection.instanceId}>
-                    {providerInstanceEntries.find(
-                      (entry) => entry.instanceId === selection.instanceId,
-                    )?.displayName ?? selection.instanceId}{" "}
-                    · {comparisonSelectionSummary(selection)}
-                  </span>
-                ))}
-              </div>
-            ) : null}
 
             {/* Bottom toolbar */}
             {isComposerCollapsedMobile || isComposerApprovalState ? null : (

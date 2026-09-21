@@ -14,21 +14,24 @@ to keep a large paste editable in the composer instead.
 
 ## Compare provider answers
 
-On web and desktop, start a new thread in a Git project and turn on **Compare
-providers**. The composer is tinted while comparison mode is active. In the
+On web and desktop, start a new thread in a Git project and turn on **Compare** beside the access control. The composer is tinted while comparison mode is active. In the
 model picker, check the providers to include. Click a provider icon to choose
 its model and effort or other supported options. Each provider has its own
-configuration; these choices do not change Settings → Providers.
+configuration; the footer in the model picker summarizes the submitted choices.
+These choices do not change Settings → Providers.
 
 Select at least two ready providers, then send your prompt once. Answers appear
 side by side with the submitted model and options. Each runs in its own worktree.
 Use **Open thread** to continue an answer, stop it, or handle an approval.
 
-Click **Compare mode** to return to normal mode without changing the prompt or
+Turn **Compare** off to return to normal mode without changing the prompt or
 your normal model settings. Toggling back on restores the comparison choices
 while this draft stays open. It does not stop comparisons already running.
-Comparison groups are stored on this client; individual threads remain in the
-sidebar.
+Expand a comparison in the sidebar to reopen its provider conversations. The
+parent opens the original answers; continuing a provider conversation does not
+replace them. A completed merge adds an output link with the number of answers
+actually included. Groups and saved outputs are stored on this client, so they
+are not shared across devices and can be lost when site data is cleared.
 
 ### Merge the answers
 
@@ -38,7 +41,7 @@ for the merge. Additional direction is optional: the default instructions infer
 the goal and answer format from your original question. Expand **Review merge
 instructions** to edit that guidance before generating.
 
-The **Merged answer** tab streams the combined response. Provider labels link to
+The **Merged** tab streams the combined response. Provider labels link to
 recorded passages from the answers used in that merge. Labels identify where an
 idea came from, not whether it has been independently verified. New deductions
 and unresolved disagreements are marked separately.

@@ -12,7 +12,7 @@ import {
   COMPARE_COLUMN_STATUS_LABEL,
   isCompareColumnPending,
   resolveCompareColumnStatus,
-  selectAnswerMessages,
+  originalComparisonTurn,
   type CompareColumnStatus,
 } from "../compareColumn.logic";
 import { useCompareRunStore, type CompareRun, type CompareRunEntry } from "../compareRunStore";
@@ -31,6 +31,7 @@ import { SidebarInset } from "./ui/sidebar";
 import { Spinner } from "./ui/spinner";
 
 const STATUS_TONE: Record<CompareColumnStatus, string> = {
+  unverified: "text-muted-foreground",
   loading: "text-muted-foreground",
   running: "text-blue-500",
   completed: "text-emerald-500",
@@ -40,7 +41,17 @@ const STATUS_TONE: Record<CompareColumnStatus, string> = {
   "not-started": "text-red-500",
 };
 
-export function CompareView({ run }: { readonly run: CompareRun }) {
+export function CompareView({
+  run,
+  tab,
+  onTabChange,
+  mergeId,
+}: {
+  readonly run: CompareRun;
+  mergeId?: string | undefined;
+  tab: "originals" | "merged";
+  onTabChange: (tab: "originals" | "merged") => void;
+}) {
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
   const settings = useEnvironmentSettings(run.environmentId);
   const providerEntriesById = useMemo(() => {
@@ -52,7 +63,7 @@ export function CompareView({ run }: { readonly run: CompareRun }) {
     return new Map(entries.map((entry) => [entry.instanceId, entry] as const));
   }, [run.environmentId, serverConfigs, settings]);
 
-  const [tab, setTab] = useState<"originals" | "merged">("originals");
+  const setTab = onTabChange;
   const [setupOpen, setSetupOpen] = useState(false);
   const [sources, setSources] = useState<Readonly<Record<string, CompareSourceState>>>({});
   const [included, setIncluded] = useState<Readonly<Record<string, boolean>>>(() =>
@@ -86,7 +97,7 @@ export function CompareView({ run }: { readonly run: CompareRun }) {
             aria-pressed={tab === "originals"}
             onClick={() => setTab("originals")}
           >
-            Original answers
+            Compare
           </Button>
           <Button
             size="sm"
@@ -94,7 +105,7 @@ export function CompareView({ run }: { readonly run: CompareRun }) {
             aria-pressed={tab === "merged"}
             onClick={() => setTab("merged")}
           >
-            Merged answer
+            Merged
           </Button>
           <Button
             size="sm"
@@ -160,6 +171,7 @@ export function CompareView({ run }: { readonly run: CompareRun }) {
       <div className={tab === "merged" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
         <CompareMergeView
           run={run}
+          initialMergeId={mergeId}
           entries={entries}
           sources={sourceList}
           included={included}
@@ -272,18 +284,23 @@ function CompareThreadColumn({
   const threadState = useEnvironmentThread(environmentId, threadId);
   const thread = Option.getOrNull(threadState.data);
 
-  const status = resolveCompareColumnStatus({
-    subscriptionStatus: threadState.status,
-    latestTurnState: thread?.latestTurn?.state ?? null,
-    sessionStatus: thread?.session?.status ?? null,
-  });
-  const answers = useMemo(() => selectAnswerMessages(thread?.messages ?? []), [thread?.messages]);
+  const original = thread ? originalComparisonTurn(thread) : null;
+  const status =
+    entry.original?.status ??
+    (original?.state === "unverified"
+      ? "unverified"
+      : resolveCompareColumnStatus({
+          subscriptionStatus: threadState.status,
+          latestTurnState: original?.state ?? null,
+          sessionStatus: thread?.session?.status ?? null,
+        }));
+  const answers = entry.original?.messages ?? original?.messages ?? [];
   const pending = isCompareColumnPending({ status, answerCount: answers.length });
   const completedAnswer =
     status === "completed" ? answers.map((message) => message.text).join("\n\n") : "";
-  const projectId = thread?.projectId;
-  const branch = thread?.branch ?? null;
-  const worktreePath = thread?.worktreePath ?? null;
+  const projectId = entry.original?.projectId ?? thread?.projectId;
+  const branch = entry.original?.branch ?? thread?.branch ?? null;
+  const worktreePath = entry.original?.worktreePath ?? thread?.worktreePath ?? null;
   useEffect(() => {
     if (!projectId) {
       onSource(threadId, null);
@@ -345,7 +362,7 @@ function CompareThreadColumn({
           <Button
             size="xs"
             variant="outline"
-            disabled={status === "missing"}
+            disabled={threadState.status === "deleted"}
             onClick={() => {
               void navigate({
                 to: "/$environmentId/$threadId",

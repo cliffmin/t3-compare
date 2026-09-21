@@ -1,4 +1,7 @@
+import { MergeSource } from "./compareMerge";
 import {
+  OrchestrationMessage,
+  ProjectId,
   EnvironmentId,
   ProviderInstanceId,
   ProviderOptionSelection,
@@ -14,13 +17,18 @@ export const COMPARE_RUN_STORAGE_KEY = "t3code:compare-runs:v1";
 const COMPARE_RUN_STORAGE_VERSION = 1;
 
 /**
- * Compare runs are a client-side grouping over threads the server already
- * owns. The orchestration log has no notion of them: a run holds only the
- * thread ids the draft fan-out produced, and every column re-reads its
- * thread from the normal subscription. Nothing here is authoritative, so a
- * lost or undecodable run costs the grid, never the work — the threads
- * remain in the sidebar either way.
+ * Client-local grouping over server-owned threads. Settled original answers and
+ * merge outputs are retained so later conversation turns cannot change the
+ * comparison. Loss of this store costs grouping and snapshots, never the threads.
  */
+const OriginalAnswerSchema = Schema.Struct({
+  messages: Schema.Array(OrchestrationMessage),
+  status: Schema.Literals(["completed", "error", "interrupted", "unverified"]),
+  projectId: ProjectId,
+  branch: Schema.NullOr(Schema.String),
+  worktreePath: Schema.NullOr(Schema.String),
+});
+
 const CompareRunEntrySchema = Schema.Struct({
   /**
    * The thread this provider is answering in, or null when its request
@@ -34,6 +42,7 @@ const CompareRunEntrySchema = Schema.Struct({
   options: Schema.optionalKey(Schema.Array(ProviderOptionSelection)),
   /** Why the request never started. Only set when `threadId` is null. */
   startError: Schema.optionalKey(Schema.String),
+  original: Schema.optionalKey(OriginalAnswerSchema),
 });
 export type CompareRunEntry = typeof CompareRunEntrySchema.Type;
 
@@ -43,6 +52,13 @@ const CompareMergeSchema = Schema.Struct({
   modelSelection: ModelSelection,
   instructions: Schema.String,
   direction: Schema.String,
+  output: Schema.optionalKey(
+    Schema.Struct({
+      title: Schema.String,
+      answer: Schema.String,
+      sources: Schema.Array(MergeSource),
+    }),
+  ),
   startError: Schema.optionalKey(Schema.String),
 });
 export type CompareMerge = typeof CompareMergeSchema.Type;
@@ -53,6 +69,9 @@ const CompareRunSchema = Schema.Struct({
   environmentId: EnvironmentId,
   /** The prompt every column received, shown once above the grid. */
   prompt: Schema.String,
+  title: Schema.optionalKey(Schema.String),
+  collapsed: Schema.optionalKey(Schema.Boolean),
+  projectId: Schema.optionalKey(ProjectId),
   entries: Schema.Array(CompareRunEntrySchema),
   merges: Schema.optionalKey(Schema.Array(CompareMergeSchema)),
   excludedThreadIds: Schema.optionalKey(Schema.Array(ThreadId)),
@@ -67,8 +86,7 @@ type PersistedCompareRunState = typeof PersistedCompareRunState.Type;
 const decodePersistedCompareRunState = Schema.decodeUnknownSync(PersistedCompareRunState);
 
 /**
- * Runs are small (a prompt and a few ids), but they accumulate for as long
- * as the origin keeps its localStorage, and they share the app's ~5MB quota
+ * Runs include answer snapshots and share the app's localStorage quota
  * with the composer drafts and the prompt stash. Older runs drop off rather
  * than competing with stores whose loss the user would actually notice.
  */
@@ -124,6 +142,7 @@ interface CompareRunStoreState {
   runs: ReadonlyArray<CompareRun>;
   /** Records a finished fan-out, evicting the oldest run past the cap. */
   recordRun: (run: CompareRun) => void;
+  updateRun: (runId: string, update: (run: CompareRun) => CompareRun) => void;
   getRun: (runId: string) => CompareRun | null;
   removeRun: (runId: string) => void;
 }
@@ -137,6 +156,12 @@ export const useCompareRunStore = create<CompareRunStoreState>()((set, get) => (
     );
     persistRuns(nextRuns);
     set(() => ({ runs: nextRuns }));
+  },
+  updateRun: (runId, update) => {
+    const nextRuns = get().runs.map((run) => (run.id === runId ? update(run) : run));
+    if (nextRuns.every((run, index) => run === get().runs[index])) return;
+    persistRuns(nextRuns);
+    set({ runs: nextRuns });
   },
   getRun: (runId) => get().runs.find((candidate) => candidate.id === runId) ?? null,
   removeRun: (runId) => {

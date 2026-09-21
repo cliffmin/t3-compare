@@ -1,3 +1,4 @@
+import { comparisonSelectionSummary } from "../../compareProviders";
 import type { ComparisonPickerConfig } from "./ComparisonProviderOptions";
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
@@ -819,7 +820,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       <div
         className={cn(
           "relative flex h-screen w-screen flex-row overflow-hidden",
-          props.comparison ? "max-h-110 max-w-110" : "max-h-86.5 max-w-90",
+          props.comparison ? "max-h-110 w-[min(27.5rem,calc(100vw-2rem))]" : "max-h-86.5 max-w-90",
         )}
         data-model-picker-content="true"
       >
@@ -888,7 +889,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
         >
           <div
             className={cn(
-              "flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/40",
+              "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-muted/40",
               showSidebar && "border-l border-border/70",
             )}
           >
@@ -1081,6 +1082,22 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                 No models found
               </ComboboxEmpty>
             )}
+            {props.comparison ? (
+              <div
+                aria-label="Comparison configuration"
+                aria-live="polite"
+                className="max-h-36 shrink-0 overflow-y-auto border-t border-border/70 px-3 py-2 text-xs text-muted-foreground"
+              >
+                {props.comparison.summarySelections.map((selection) => (
+                  <p key={selection.instanceId} className="break-words py-0.5">
+                    {instanceEntries.find((entry) => entry.instanceId === selection.instanceId)
+                      ?.displayName ?? selection.instanceId}
+                    {" · "}
+                    {comparisonSelectionSummary(selection)}
+                  </p>
+                ))}
+              </div>
+            ) : null}
           </div>
         </Combobox>
       </div>

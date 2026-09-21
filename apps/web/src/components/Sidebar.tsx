@@ -1,3 +1,6 @@
+import { useCompareRunStore } from "../compareRunStore";
+import { ComparisonSnapshots } from "./ComparisonSnapshots";
+import { ComparisonGroup } from "./ComparisonGroup";
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
 import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
@@ -2150,6 +2153,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
 });
 
 export default function Sidebar() {
+  const comparisonRuns = useCompareRunStore((state) => state.runs);
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
@@ -4427,6 +4431,9 @@ export default function Sidebar() {
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
   return (
     <>
+      {comparisonRuns.map((run) => (
+        <ComparisonSnapshots key={run.id} run={run} />
+      ))}
       <SidebarChromeHeader isElectron={isElectron} />
       <SidebarContent
         className="gap-0 min-h-full"
@@ -4828,9 +4835,79 @@ export default function Sidebar() {
                           onNavigateToDraft={navigateToDraft}
                         />,
                       ];
+                      const groups = comparisonRuns.filter(
+                        (run) =>
+                          scopedProjectKeys === null ||
+                          (run.projectId &&
+                            scopedProjectKeys.has(`${run.environmentId}:${run.projectId}`)) ||
+                          run.entries.some((entry) =>
+                            threads.some(
+                              (thread) =>
+                                thread.environmentId === run.environmentId &&
+                                thread.id === entry.threadId &&
+                                scopedProjectKeys.has(
+                                  `${thread.environmentId}:${thread.projectId}`,
+                                ),
+                            ),
+                          ),
+                      );
+                      const groupByThread = new Map<string, (typeof groups)[number]>();
+                      for (const run of groups) {
+                        for (const id of [
+                          ...run.entries.map((entry) => entry.threadId),
+                          ...(run.merges ?? [])
+                            .filter((merge) => merge.output)
+                            .map((merge) => merge.threadId),
+                        ]) {
+                          if (id)
+                            groupByThread.set(
+                              scopedThreadKey(scopeThreadRef(run.environmentId, id)),
+                              run,
+                            );
+                        }
+                      }
+                      const renderedGroups = new Set<string>();
+                      const renderGroup = (run: (typeof groups)[number]) => {
+                        renderedGroups.add(run.id);
+                        return (
+                          <ComparisonGroup key={run.id} run={run} threads={threads}>
+                            {run.entries.map((entry) => {
+                              const key = entry.threadId
+                                ? scopedThreadKey(scopeThreadRef(run.environmentId, entry.threadId))
+                                : null;
+                              const item = sidebarListItems.find(
+                                (row) => row.kind === "thread" && row.key === key,
+                              );
+                              const thread = key ? threadByKey.get(key) : undefined;
+                              if (thread && item?.kind === "thread")
+                                return renderThreadRow(thread, item.section);
+                              // Keep lifecycle shelves authoritative: hidden/snoozed sessions
+                              // stay hidden; genuinely absent sessions retain an honest label.
+                              const exists = threads.some(
+                                (thread) =>
+                                  thread.environmentId === run.environmentId &&
+                                  thread.id === entry.threadId,
+                              );
+                              return !exists ? (
+                                <li
+                                  key={key ?? `${run.id}:${entry.instanceId}`}
+                                  className="px-2 py-2 text-xs text-muted-foreground"
+                                >
+                                  {entry.instanceId} ·{" "}
+                                  {entry.threadId ? "Session unavailable" : "Failed to start"}
+                                </li>
+                              ) : null;
+                            })}
+                          </ComparisonGroup>
+                        );
+                      };
                       for (const item of sidebarListItems) {
                         if (item.kind === "thread") {
-                          items.push(renderThreadRow(threadByKey.get(item.key)!, item.section));
+                          const group = groupByThread.get(item.key);
+                          if (group) {
+                            if (!renderedGroups.has(group.id)) items.push(renderGroup(group));
+                          } else
+                            items.push(renderThreadRow(threadByKey.get(item.key)!, item.section));
                           continue;
                         }
                         switch (item.marker) {
@@ -4932,6 +5009,8 @@ export default function Sidebar() {
                             break;
                         }
                       }
+                      for (const run of groups)
+                        if (!renderedGroups.has(run.id)) items.push(renderGroup(run));
                       return items;
                     })()}
                     {settledShelfExpanded && hiddenSettledCount > 0 ? (

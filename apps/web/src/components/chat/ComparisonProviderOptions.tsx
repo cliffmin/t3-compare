@@ -8,6 +8,7 @@ import { getProviderModelCapabilities } from "../../providerModels";
 
 export interface ComparisonPickerConfig {
   selections: ReadonlyArray<ModelSelection>;
+  summarySelections: ReadonlyArray<ModelSelection>;
   canIncludeProvider: (instanceId: ProviderInstanceId) => boolean;
   onToggleProvider: (instanceId: ProviderInstanceId) => void;
   onModelChange: (instanceId: ProviderInstanceId, model: string) => void;

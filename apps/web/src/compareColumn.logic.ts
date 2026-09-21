@@ -1,5 +1,6 @@
 import type {
   OrchestrationLatestTurnState,
+  OrchestrationThread,
   OrchestrationMessage,
   OrchestrationSessionStatus,
 } from "@t3tools/contracts";
@@ -7,6 +8,7 @@ import type {
 import type { EnvironmentThreadStatus } from "@t3tools/client-runtime/state/threads";
 
 export type CompareColumnStatus =
+  | "unverified"
   | "loading"
   | "running"
   | "completed"
@@ -62,6 +64,7 @@ export function isCompareColumnPending(input: {
 }
 
 export const COMPARE_COLUMN_STATUS_LABEL: Record<CompareColumnStatus, string> = {
+  unverified: "Completion unknown",
   loading: "Starting",
   running: "Working",
   completed: "Done",
@@ -70,3 +73,24 @@ export const COMPARE_COLUMN_STATUS_LABEL: Record<CompareColumnStatus, string> = 
   missing: "Deleted",
   "not-started": "Never started",
 };
+
+/** Only the first submitted turn belongs to a comparison, even after a follow-up. */
+export function originalComparisonTurn(
+  thread: Pick<OrchestrationThread, "messages" | "latestTurn">,
+) {
+  const firstUser = thread.messages.findIndex((message) => message.role === "user");
+  const nextUser = thread.messages.findIndex(
+    (message, index) => index > firstUser && message.role === "user",
+  );
+  const messages = selectAnswerMessages(
+    thread.messages.slice(0, nextUser < 0 ? undefined : nextUser),
+  );
+  // Legacy runs may already have follow-ups. Without a saved terminal state we
+  // retain their original text but never infer successful completion from a later turn.
+  const state = nextUser < 0 ? thread.latestTurn?.state : ("unverified" as const);
+  return { messages, state };
+}
+
+export function comparisonFallbackTitle(prompt: string): string {
+  return prompt.replace(/\s+/g, " ").trim().slice(0, 80) || "Comparison";
+}
