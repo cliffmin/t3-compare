@@ -1,4 +1,21 @@
-# T3 Code
+# T3 Compare
+
+An experimental, independent fork of [T3 Code](https://github.com/pingdotgg/t3code)
+by Cliff Min. Compare answers from connected AI providers, then synthesize selected
+responses with links back to their source passages.
+
+The fork adds per-provider model/options selection, comparison results, and versioned
+merge answers. T3 supplies the underlying provider adapters, typed WebSocket server,
+event-sourced orchestration, and desktop/web/mobile foundation. Source attribution
+helps inspect an answer; it does not independently verify model claims.
+
+Workflow and UI development is ongoing. Start with the [contribution workflow](CONTRIBUTING.md),
+[comparison guide](docs/user/composer.md), and [development setup](docs/operations/development.md).
+The fork's CI definition is [Fork CI](.github/workflows/fork-ci.yml); a workflow definition
+alone is not evidence of a passing hosted run. Public fork-specific binaries are not yet provided.
+The installation links below install **upstream T3**, not this experimental fork.
+
+## Upstream T3 Code
 
 T3 Code is an "agent harness control surface". It enables control of the agents on your machine with a best-in-class mobile app ([iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824), [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)), [web app](https://app.t3.codes) and [Electron-based desktop app](https://t3.codes).
 

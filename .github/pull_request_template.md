@@ -1,33 +1,21 @@
-<!--
-⚠️ READ BEFORE OPENING ⚠️
+## Problem and behavior
 
-We are not actively accepting contributions right now.
+<!-- What concrete problem does this solve? Describe the observable before/after. -->
 
-You can still open a PR, but please do so knowing there is a high chance
-we may close it without merging it, or never review it.
+## Design and tradeoffs
 
-- Small, focused PRs are strongly preferred. Bug fixes are most likely to be merged.
-- New features will most likely just annoy us.
-- 1,000+ line PRs with a bunch of new features will probably get you banned from the repo.
--->
+<!-- Mention alternatives only where they explain a decision. Identify inherited behavior versus additions. -->
 
-## What Changed
+## Verification
 
-<!-- Describe the change clearly and keep scope tight. -->
+<!-- Exact focused checks and results. Include failure cases. State what was not verified.
+For UI changes, attach before/after images or an interaction recording. -->
 
-## Why
+## Risks and recovery
 
-<!-- Explain the problem being solved and why this approach is the right one. -->
+<!-- Compatibility, data/state implications, and how to revert when relevant. -->
 
-## UI Changes
+## AI assistance
 
-<!-- If this PR changes UI, include clear before/after screenshots.
-     If the change involves motion or interaction, include a short video.
-     Delete this section if not applicable. -->
-
-## Checklist
-
-- [ ] This PR is small and focused
-- [ ] I explained what changed and why
-- [ ] I included before/after screenshots for any UI changes
-- [ ] I included a video for animation/interaction changes
+<!-- Model + harness, what it assisted with, and how the author reviewed/verified the result.
+Write "None" if no AI was used. Never paste private prompts or credentials. -->
