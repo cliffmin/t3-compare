@@ -1,3 +1,4 @@
+import type { ComparisonPickerConfig } from "./ComparisonProviderOptions";
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
   type ProviderInstanceId,
@@ -34,6 +35,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
    */
   activeInstanceId: ProviderInstanceId;
   model: string;
+  comparison?: ComparisonPickerConfig;
   selectedModels?: ReadonlyArray<{ instanceId: ProviderInstanceId; model: string }>;
   onToggleModel?: (instanceId: ProviderInstanceId, model: string) => void;
   lockedProvider: ProviderDriverKind | null;
@@ -153,6 +155,10 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
 
   const handleInstanceModelChange = (instanceId: ProviderInstanceId, model: string) => {
     if (props.disabled) return;
+    if (props.comparison) {
+      props.comparison.onModelChange(instanceId, model);
+      return;
+    }
     props.onInstanceModelChange(instanceId, model);
     setIsMenuOpen(false);
   };
@@ -285,10 +291,14 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       <PopoverPopup
         {...(props.isComposerOwned ? composerFloatingLayerProps : {})}
         align="start"
-        className="before:hidden [--viewport-inline-padding:0]"
+        className={cn(
+          "before:hidden [--viewport-inline-padding:0]",
+          props.comparison && "ring-1 ring-primary/50",
+        )}
         viewportClassName="overflow-hidden! rounded-[calc(var(--radius-lg)-1px)] p-0 [clip-path:inset(0_round_calc(var(--radius-lg)-1px))]"
       >
         <ModelPickerContent
+          {...(props.comparison ? { comparison: props.comparison } : {})}
           activeInstanceId={activeInstanceId}
           model={props.model}
           {...(props.selectedModels !== undefined ? { selectedModels: props.selectedModels } : {})}

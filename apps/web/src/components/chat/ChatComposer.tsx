@@ -246,6 +246,15 @@ import {
 import { useEnvironmentQuery } from "~/state/query";
 import { useDebouncedValue } from "~/state/queries";
 import { ProviderModelPicker } from "./ProviderModelPicker";
+import {
+  selectComparisonModels,
+  updateComparisonSelection,
+  comparisonSelectionSummary,
+} from "../../compareProviders";
+import {
+  ComparisonProviderOptions,
+  type ComparisonPickerConfig,
+} from "./ComparisonProviderOptions";
 import { resolveModelPickerSelectedModel } from "./ModelPickerContent";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
@@ -1155,6 +1164,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
 
 const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(props: {
   compact: boolean;
+  comparisonCount?: number | undefined;
   activeContextWindow: ContextWindowSnapshot | null;
   reserveContextWindowMeter: boolean;
   activeThreadModelDisplayName: string | null;
@@ -1197,6 +1207,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
       ) : null}
       <ComposerPrimaryActions
         compact={props.compact}
+        comparisonCount={props.comparisonCount}
         pendingAction={props.pendingAction}
         isRunning={props.isRunning}
         showPlanFollowUpPrompt={props.showPlanFollowUpPrompt}
@@ -1900,7 +1911,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   );
   const sendDisabledReason =
     externalSendDisabledReason ??
-    (multipleModelSelections?.length === 0 ? "Select at least one model." : null) ??
+    (multipleModelSelections !== null && multipleModelSelections.length < 2
+      ? "Select at least two providers."
+      : null) ??
     (activePendingProgress
       ? attachmentBlockReason
       : (attachmentBlockReason ??
@@ -2612,7 +2625,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     planModeEnabled: settings.planModeEnabled,
     isComposerOwned: true,
   } satisfies Parameters<typeof renderProviderTraitsPicker>[0];
-  const providerTraitsPicker = renderProviderTraitsPicker(providerTraitsPickerInput);
+  const providerTraitsPicker =
+    multipleModelSelections === null ? renderProviderTraitsPicker(providerTraitsPickerInput) : null;
   const {
     controlsRef: restingComposerControlsRef,
     hiddenBlockCount: restingControlsHiddenBlockCount,
@@ -4939,6 +4953,112 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const hiddenRestingBlockIds = restingBlockDefs
     .slice(restingBlockDefs.length - restingHiddenBlockCount)
     .map((def) => def.id);
+  const comparisonModels = useMemo(
+    () =>
+      routeKind === "draft" && supportsMultipleModels
+        ? selectComparisonModels(
+            providerInstanceEntries,
+            modelOptionsByInstance,
+            getModelDisabledReason,
+          )
+        : [],
+    [
+      routeKind,
+      supportsMultipleModels,
+      providerInstanceEntries,
+      modelOptionsByInstance,
+      getModelDisabledReason,
+    ],
+  );
+  const comparisonKey = `${environmentId}:${draftId ?? ""}`;
+  const [comparisonMemory, setComparisonMemory] = useState<
+    Record<
+      string,
+      {
+        configurations: ReadonlyArray<ModelSelection>;
+        checked?: ReadonlyArray<ModelSelection>;
+      }
+    >
+  >({});
+  const rememberedComparison = comparisonMemory[comparisonKey];
+  const getComparisonSelection = (instanceId: ProviderInstanceId) =>
+    multipleModelSelections?.find((selection) => selection.instanceId === instanceId) ??
+    rememberedComparison?.configurations.find((selection) => selection.instanceId === instanceId) ??
+    (instanceId === selectedModelSelection.instanceId ? selectedModelSelection : undefined) ??
+    comparisonModels.find((selection) => selection.instanceId === instanceId);
+  const changeComparisonSelection = (selection: ModelSelection) => {
+    setComparisonMemory((memory) => ({
+      ...memory,
+      [comparisonKey]: {
+        ...memory[comparisonKey],
+        configurations: updateComparisonSelection(
+          memory[comparisonKey]?.configurations ?? [],
+          selection,
+        ),
+      },
+    }));
+    setMultipleModelSelections((current) =>
+      current?.some((item) => item.instanceId === selection.instanceId)
+        ? updateComparisonSelection(current, selection)
+        : current,
+    );
+  };
+  const comparison: ComparisonPickerConfig | undefined =
+    multipleModelSelections === null
+      ? undefined
+      : {
+          selections: multipleModelSelections,
+          canIncludeProvider: (instanceId) =>
+            comparisonModels.some((selection) => selection.instanceId === instanceId),
+          onToggleProvider: (instanceId) => {
+            const selection = getComparisonSelection(instanceId);
+            if (!selection) return;
+            changeComparisonSelection(selection);
+            setMultipleModelSelections((current) =>
+              current === null
+                ? null
+                : current.some((item) => item.instanceId === instanceId)
+                  ? current.filter((item) => item.instanceId !== instanceId)
+                  : [...current, selection],
+            );
+          },
+          onModelChange: (instanceId, model) => {
+            const previous = getComparisonSelection(instanceId);
+            changeComparisonSelection(
+              previous?.model === model ? previous : createModelSelection(instanceId, model),
+            );
+          },
+          renderOptions: (instanceId) => {
+            const entry = providerInstanceEntries.find((item) => item.instanceId === instanceId);
+            const selection = getComparisonSelection(instanceId);
+            return entry && selection ? (
+              <ComparisonProviderOptions
+                entry={entry}
+                selection={selection}
+                planModeEnabled={settings.planModeEnabled}
+                onChange={changeComparisonSelection}
+              />
+            ) : null;
+          },
+        };
+  const toggleComparison = () => {
+    if (multipleModelSelections !== null) {
+      setComparisonMemory((memory) => ({
+        ...memory,
+        [comparisonKey]: {
+          configurations: multipleModelSelections.reduce(
+            (configs, selection) => updateComparisonSelection(configs, selection),
+            memory[comparisonKey]?.configurations ?? [],
+          ),
+          checked: multipleModelSelections,
+        },
+      }));
+      setMultipleModelSelections(null);
+    } else {
+      setMultipleModelSelections(rememberedComparison?.checked ?? [selectedModelSelection]);
+      setIsComposerModelPickerOpen(true);
+    }
+  };
   const composerControls = showProviderUnavailable ? (
     <Button
       type="button"
@@ -4968,39 +5088,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       <ProviderModelPicker
         isComposerOwned
         disabled={providerCatalogPending || isSendBusy}
-        {...(routeKind === "draft" && supportsMultipleModels
+        {...(comparison
           ? {
-              ...(multipleModelSelections !== null
-                ? { selectedModels: multipleModelSelections }
-                : {}),
-              onToggleModel: (instanceId: ProviderInstanceId, model: string) => {
-                const current = multipleModelSelections ?? [selectedModelSelection];
-                const matchesModel = (selection: ModelSelection) => {
-                  if (selection.instanceId !== instanceId) return false;
-                  const entry = providerInstanceEntries.find(
-                    (entry) => entry.instanceId === selection.instanceId,
-                  );
-                  const resolvedModel = resolveModelPickerSelectedModel({
-                    driverKind: entry?.driverKind,
-                    model: selection.model,
-                    options: modelOptionsByInstance.get(selection.instanceId) ?? [],
-                  });
-                  return (resolvedModel?.slug ?? selection.model) === model;
-                };
-                const exists = current.some(matchesModel);
-                const next = exists
-                  ? current.filter((selection) => !matchesModel(selection))
-                  : [...current, createModelSelection(instanceId, model)];
-                if (next.length > 1) {
-                  setMultipleModelSelections(next);
-                } else {
-                  setMultipleModelSelections(null);
-                  const remaining = next[0] ?? selectedModelSelection;
-                  onProviderModelSelect(remaining.instanceId, remaining.model, {
-                    focusComposer: false,
-                  });
-                }
-              },
+              comparison,
+              selectedModels: comparison.selections,
+              triggerLabel: `${comparison.selections.length} providers`,
+              triggerAriaLabel: "Configure comparison providers",
             }
           : {})}
         activeInstanceId={
@@ -5049,12 +5142,29 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         onOpenProviderSetup={onOpenProviderSetup}
       />
 
+      {routeKind === "draft" && supportsMultipleModels ? (
+        <Button
+          type="button"
+          size="xs"
+          variant={multipleModelSelections !== null ? "secondary" : "ghost"}
+          disabled={
+            providerCatalogPending ||
+            isSendBusy ||
+            (multipleModelSelections === null && comparisonModels.length < 2)
+          }
+          aria-pressed={multipleModelSelections !== null}
+          onClick={toggleComparison}
+        >
+          {multipleModelSelections !== null ? "Compare mode" : "Compare providers"}
+        </Button>
+      ) : null}
+
       {composerControlsCompact ? (
         <CompactComposerControlsMenu
           interactionMode={interactionMode}
           runtimeMode={runtimeMode}
           showInteractionModeToggle={planModeUiEnabled}
-          traitsMenuContent={providerTraitsMenuContent}
+          traitsMenuContent={multipleModelSelections === null ? providerTraitsMenuContent : null}
           onToggleInteractionMode={toggleInteractionMode}
           onRuntimeModeChange={handleRuntimeModeChange}
         />
@@ -5964,15 +6074,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         selectedPromptEffort,
         selectedModelOptionsForDispatch,
         selectedModelSelection,
-        multipleModelSelections:
-          routeKind === "draft" && multipleModelSelections !== null
-            ? multipleModelSelections.map((selection) =>
-                selection.instanceId === selectedModelSelection.instanceId &&
-                selection.model === selectedModelSelection.model
-                  ? selectedModelSelection
-                  : selection,
-              )
-            : null,
+        multipleModelSelections: routeKind === "draft" ? multipleModelSelections : null,
         providerAvailable:
           multipleModelSelections !== null ||
           (!noProviderAvailable && providerSendBlockReason === null),
@@ -6318,6 +6420,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               isDragOverComposer ? "bg-accent/45 ring-1 ring-primary/70" : null,
               projectSelectionRequired ? "opacity-75" : null,
               composerProviderState.composerSurfaceClassName,
+              multipleModelSelections !== null && "bg-primary/5 ring-1 ring-primary/50",
             )}
           >
             {showCollapsedMobilePromptRow ? (
@@ -6872,6 +6975,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     className="absolute bottom-0 right-0 flex items-center justify-end gap-1"
                   >
                     <ComposerPrimaryActions
+                      comparisonCount={multipleModelSelections?.length}
                       compact
                       pendingAction={pendingPrimaryAction}
                       isRunning={false}
@@ -6900,6 +7004,22 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             <ComposerPromptLengthValidation
               message={providerInputSubmissionError ?? composerSubmissionError}
             />
+
+            {multipleModelSelections !== null ? (
+              <div
+                className="flex flex-wrap gap-x-4 gap-y-1 px-4 pb-2 text-xs text-muted-foreground"
+                aria-label="Comparison configuration"
+              >
+                {multipleModelSelections.map((selection) => (
+                  <span key={selection.instanceId}>
+                    {providerInstanceEntries.find(
+                      (entry) => entry.instanceId === selection.instanceId,
+                    )?.displayName ?? selection.instanceId}{" "}
+                    · {comparisonSelectionSummary(selection)}
+                  </span>
+                ))}
+              </div>
+            ) : null}
 
             {/* Bottom toolbar */}
             {isComposerCollapsedMobile || isComposerApprovalState ? null : (
@@ -6974,6 +7094,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     </>
                   ) : null}
                   <ComposerFooterPrimaryActions
+                    comparisonCount={multipleModelSelections?.length}
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
                     activeContextWindow={
                       settings.contextWindowMeterEnabled ? activeContextWindow : null

@@ -7377,7 +7377,7 @@ export default function ChatView(props: ChatViewProps) {
       (!isLocalDraftThread ||
         !isGitRepo ||
         !activeThreadBranch ||
-        multipleModelSelections.length === 0)
+        multipleModelSelections.length < 2)
     ) {
       toastManager.add(
         stackedThreadToast({
@@ -8048,12 +8048,14 @@ export default function ChatView(props: ChatViewProps) {
                 threadId: targetThreadId,
                 instanceId: target.selection.instanceId,
                 model: target.selection.model,
+                ...(target.selection.options ? { options: target.selection.options } : {}),
               };
             } catch (error) {
               attemptedEntries[targetIndex] = {
                 threadId: null,
                 instanceId: target.selection.instanceId,
                 model: target.selection.model,
+                ...(target.selection.options ? { options: target.selection.options } : {}),
                 startError:
                   error instanceof Error ? error.message : "The request could not be sent.",
               };

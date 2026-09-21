@@ -1,9 +1,12 @@
+import { CompareMergeView, type CompareSourceState } from "./CompareMergeView";
+import { snapshotMergeSource } from "../compareMerge";
+import { comparisonSelectionSummary } from "../compareProviders";
 import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import * as Option from "effect/Option";
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   COMPARE_COLUMN_STATUS_LABEL,
@@ -12,7 +15,7 @@ import {
   selectAnswerMessages,
   type CompareColumnStatus,
 } from "../compareColumn.logic";
-import type { CompareRun, CompareRunEntry } from "../compareRunStore";
+import { useCompareRunStore, type CompareRun, type CompareRunEntry } from "../compareRunStore";
 import { useEnvironmentSettings } from "../hooks/useSettings";
 import {
   applyProviderInstanceSettings,
@@ -49,6 +52,26 @@ export function CompareView({ run }: { readonly run: CompareRun }) {
     return new Map(entries.map((entry) => [entry.instanceId, entry] as const));
   }, [run.environmentId, serverConfigs, settings]);
 
+  const [tab, setTab] = useState<"originals" | "merged">("originals");
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [sources, setSources] = useState<Readonly<Record<string, CompareSourceState>>>({});
+  const [included, setIncluded] = useState<Readonly<Record<string, boolean>>>(() =>
+    Object.fromEntries((run.excludedThreadIds ?? []).map((id) => [id, false])),
+  );
+  const onSource = useCallback((threadId: ThreadId, source: CompareSourceState | null) => {
+    setSources((current) => {
+      if (source) return { ...current, [threadId]: source };
+      if (!(threadId in current)) return current;
+      const next = { ...current };
+      delete next[threadId];
+      return next;
+    });
+  }, []);
+  const sourceList = run.entries.flatMap((entry) =>
+    entry.threadId && sources[entry.threadId] ? [sources[entry.threadId]!] : [],
+  );
+  const entries = useMemo(() => [...providerEntriesById.values()], [providerEntriesById]);
+
   return (
     <SidebarInset className="h-dvh min-h-0 flex-col overflow-hidden overscroll-y-none bg-background text-foreground">
       <header className="flex shrink-0 flex-col gap-1 border-b border-border/70 px-4 py-3">
@@ -56,6 +79,34 @@ export function CompareView({ run }: { readonly run: CompareRun }) {
           Comparing {run.entries.length} providers
         </p>
         <p className="line-clamp-2 text-sm text-foreground">{run.prompt}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant={tab === "originals" ? "secondary" : "ghost"}
+            aria-pressed={tab === "originals"}
+            onClick={() => setTab("originals")}
+          >
+            Original answers
+          </Button>
+          <Button
+            size="sm"
+            variant={tab === "merged" ? "secondary" : "ghost"}
+            aria-pressed={tab === "merged"}
+            onClick={() => setTab("merged")}
+          >
+            Merged answer
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setTab("merged");
+              setSetupOpen(true);
+            }}
+          >
+            Merge best answer
+          </Button>
+        </div>
       </header>
 
       {/*
@@ -65,7 +116,11 @@ export function CompareView({ run }: { readonly run: CompareRun }) {
         being compared. Each column scrolls on its own so a verbose provider
         cannot push the others' text out of view.
       */}
-      <div className="flex min-h-0 flex-1 gap-px overflow-x-auto bg-border/70">
+      <div
+        className={
+          tab === "originals" ? "flex min-h-0 flex-1 gap-px overflow-x-auto bg-border/70" : "hidden"
+        }
+      >
         {run.entries.map((entry, index) => {
           const providerEntry = providerEntriesById.get(entry.instanceId) ?? null;
           // A never-started provider has no thread to subscribe to, so it
@@ -82,12 +137,35 @@ export function CompareView({ run }: { readonly run: CompareRun }) {
             <CompareThreadColumn
               key={entry.threadId}
               entry={entry}
+              sourceIndex={index}
+              onSource={onSource}
+              included={included[entry.threadId] !== false}
+              onIncludeChange={(value) => {
+                setIncluded((current) => ({ ...current, [entry.threadId!]: value }));
+                const store = useCompareRunStore.getState();
+                const current = store.getRun(run.id);
+                if (!current) return;
+                const excluded = new Set(current.excludedThreadIds ?? []);
+                if (value) excluded.delete(entry.threadId!);
+                else excluded.add(entry.threadId!);
+                store.recordRun({ ...current, excludedThreadIds: [...excluded] });
+              }}
               threadId={entry.threadId}
               environmentId={run.environmentId}
               providerEntry={providerEntry}
             />
           );
         })}
+      </div>
+      <div className={tab === "merged" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+        <CompareMergeView
+          run={run}
+          entries={entries}
+          sources={sourceList}
+          included={included}
+          setupOpen={setupOpen}
+          onSetupOpenChange={setSetupOpen}
+        />
       </div>
     </SidebarInset>
   );
@@ -104,6 +182,7 @@ function CompareColumnFrame({
   status,
   children,
   footer,
+  inclusion,
 }: {
   readonly providerEntry: ProviderInstanceEntry | null;
   readonly instanceId: string;
@@ -111,6 +190,7 @@ function CompareColumnFrame({
   readonly status: CompareColumnStatus;
   readonly children: ReactNode;
   readonly footer: ReactNode;
+  readonly inclusion?: ReactNode;
 }) {
   const displayName = providerEntry?.displayName ?? instanceId;
   return (
@@ -126,13 +206,14 @@ function CompareColumnFrame({
         ) : null}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-foreground">{displayName}</p>
-          <p className="truncate text-xs text-muted-foreground">{model}</p>
+          <p className="break-words text-xs text-muted-foreground">{model}</p>
         </div>
         <span className={`shrink-0 text-xs font-medium ${STATUS_TONE[status]}`}>
           {COMPARE_COLUMN_STATUS_LABEL[status]}
         </span>
       </div>
 
+      {inclusion}
       <div className="scrollbar-gutter-both min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {children}
       </div>
@@ -156,7 +237,7 @@ function CompareFailedColumn({
     <CompareColumnFrame
       providerEntry={providerEntry}
       instanceId={entry.instanceId}
-      model={entry.model}
+      model={comparisonSelectionSummary(entry)}
       status="not-started"
       footer={<span className="text-xs text-muted-foreground">No worktree</span>}
     >
@@ -170,11 +251,19 @@ function CompareFailedColumn({
 /** A provider answering in its own thread and worktree. */
 function CompareThreadColumn({
   entry,
+  sourceIndex,
+  onSource,
+  included,
+  onIncludeChange,
   threadId,
   environmentId,
   providerEntry,
 }: {
   readonly entry: CompareRunEntry;
+  readonly sourceIndex: number;
+  readonly onSource: (threadId: ThreadId, source: CompareSourceState | null) => void;
+  readonly included: boolean;
+  readonly onIncludeChange: (included: boolean) => void;
   readonly threadId: ThreadId;
   readonly environmentId: EnvironmentId;
   readonly providerEntry: ProviderInstanceEntry | null;
@@ -190,18 +279,69 @@ function CompareThreadColumn({
   });
   const answers = useMemo(() => selectAnswerMessages(thread?.messages ?? []), [thread?.messages]);
   const pending = isCompareColumnPending({ status, answerCount: answers.length });
+  const completedAnswer =
+    status === "completed" ? answers.map((message) => message.text).join("\n\n") : "";
+  const projectId = thread?.projectId;
+  const branch = thread?.branch ?? null;
+  const worktreePath = thread?.worktreePath ?? null;
+  useEffect(() => {
+    if (!projectId) {
+      onSource(threadId, null);
+      return;
+    }
+    onSource(threadId, {
+      source: snapshotMergeSource({
+        index: sourceIndex,
+        label: providerEntry?.displayName ?? entry.instanceId,
+        model: entry.model,
+        threadId,
+        text: completedAnswer,
+      }),
+      status,
+      projectId,
+      branch,
+      worktreePath,
+    });
+  }, [
+    threadId,
+    sourceIndex,
+    providerEntry?.displayName,
+    entry.instanceId,
+    entry.model,
+    completedAnswer,
+    status,
+    projectId,
+    branch,
+    worktreePath,
+    onSource,
+  ]);
 
   return (
     <CompareColumnFrame
       providerEntry={providerEntry}
       instanceId={entry.instanceId}
-      model={entry.model}
+      model={comparisonSelectionSummary(entry)}
       status={status}
+      inclusion={
+        <label className="flex items-center gap-2 border-b border-border/70 px-3 py-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            className="accent-primary"
+            checked={included && status === "completed" && answers.length > 0}
+            disabled={status !== "completed" || answers.length === 0}
+            onChange={(event) => onIncludeChange(event.target.checked)}
+          />
+          Include in merge
+          {status === "running" || status === "loading"
+            ? " · Waiting for completion"
+            : status !== "completed"
+              ? " · Not eligible"
+              : ""}
+        </label>
+      }
       footer={
         <>
-          <span className="truncate text-xs text-muted-foreground" title={thread?.branch ?? ""}>
-            {thread?.branch ?? "—"}
-          </span>
+          <span className="truncate text-xs text-muted-foreground">{thread?.branch ?? "—"}</span>
           <Button
             size="xs"
             variant="outline"

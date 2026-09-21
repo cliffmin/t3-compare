@@ -32,7 +32,7 @@ function CompareRouteView() {
     );
   }
 
-  return <CompareView run={run} />;
+  return <CompareView key={run.id} run={run} />;
 }
 
 export const Route = createFileRoute("/_chat/compare/$runId")({

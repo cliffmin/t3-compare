@@ -1,3 +1,4 @@
+import type { ComparisonPickerConfig } from "./ComparisonProviderOptions";
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
   type ProviderInstanceId,
@@ -151,6 +152,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   /** The instance currently selected in the composer (combobox "value"). */
   activeInstanceId: ProviderInstanceId;
   model: string;
+  comparison?: ComparisonPickerConfig;
   selectedModels?: ReadonlyArray<{ instanceId: ProviderInstanceId; model: string }>;
   onToggleModel?: (instanceId: ProviderInstanceId, model: string) => void;
   /**
@@ -248,6 +250,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const [selectedInstanceId, setSelectedInstanceId] = useState<ProviderInstanceId | "favorites">(
     () => {
       if (
+        props.comparison !== undefined ||
         props.lockedProvider !== null ||
         activeInstanceHasSelectableUnavailableModel ||
         activeInstanceNeedsSetup
@@ -612,7 +615,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       // normalization rules, so pass the driver kind here.
       const resolvedModel = resolveSelectableModel(entry.driverKind, modelSlug, options);
       if (resolvedModel) {
-        if (additive && onToggleModel) {
+        if (props.comparison) {
+          props.comparison.onModelChange(instanceId, resolvedModel);
+        } else if (additive && onToggleModel) {
           onToggleModel(instanceId, resolvedModel);
         } else {
           onInstanceModelChange(instanceId, resolvedModel);
@@ -625,6 +630,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       modelOptionsByInstance,
       onInstanceModelChange,
       onToggleModel,
+      props.comparison,
     ],
   );
 
@@ -811,7 +817,10 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   return (
     <TooltipProvider delay={0}>
       <div
-        className="relative flex h-screen max-h-86.5 w-screen max-w-90 flex-row overflow-hidden"
+        className={cn(
+          "relative flex h-screen w-screen flex-row overflow-hidden",
+          props.comparison ? "max-h-110 max-w-110" : "max-h-86.5 max-w-90",
+        )}
         data-model-picker-content="true"
       >
         {/* Sidebar */}
@@ -821,7 +830,8 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
             onSelectInstance={handleSelectInstance}
             onFocusSearch={focusSearchInput}
             instanceEntries={sidebarInstanceEntries}
-            showFavorites
+            showFavorites={!props.comparison}
+            {...(props.comparison ? { comparison: props.comparison } : {})}
             {...(selectableUnavailableInstanceIds ? { selectableUnavailableInstanceIds } : {})}
             {...(lockedDisabledInstanceIds
               ? {
@@ -842,8 +852,8 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
           autoHighlight
           open
           virtualized
-          multiple={onToggleModel !== undefined}
-          value={onToggleModel ? [...selectedModelKeySet] : activeModelKey}
+          multiple={onToggleModel !== undefined || props.comparison !== undefined}
+          value={onToggleModel || props.comparison ? [...selectedModelKeySet] : activeModelKey}
           onItemHighlighted={(modelKey, eventDetails) => {
             highlightedModelKeyRef.current = typeof modelKey === "string" ? modelKey : null;
             if (eventDetails.reason === "keyboard" && eventDetails.index >= 0) {
@@ -882,6 +892,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
               showSidebar && "border-l border-border/70",
             )}
           >
+            {props.comparison && selectedInstanceId !== "favorites"
+              ? props.comparison.renderOptions(selectedInstanceId)
+              : null}
             {/* Search bar */}
             <div className="px-2 pt-2">
               <div className="border-b border-border/70 pb-2.5 transition-colors focus-within:border-ring">

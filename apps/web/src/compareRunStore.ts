@@ -1,4 +1,10 @@
-import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProviderInstanceId,
+  ProviderOptionSelection,
+  ModelSelection,
+  ThreadId,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { create } from "zustand";
 
@@ -25,10 +31,21 @@ const CompareRunEntrySchema = Schema.Struct({
   threadId: Schema.NullOr(ThreadId),
   instanceId: ProviderInstanceId,
   model: Schema.String,
+  options: Schema.optionalKey(Schema.Array(ProviderOptionSelection)),
   /** Why the request never started. Only set when `threadId` is null. */
   startError: Schema.optionalKey(Schema.String),
 });
 export type CompareRunEntry = typeof CompareRunEntrySchema.Type;
+
+const CompareMergeSchema = Schema.Struct({
+  threadId: ThreadId,
+  createdAt: Schema.String,
+  modelSelection: ModelSelection,
+  instructions: Schema.String,
+  direction: Schema.String,
+  startError: Schema.optionalKey(Schema.String),
+});
+export type CompareMerge = typeof CompareMergeSchema.Type;
 
 const CompareRunSchema = Schema.Struct({
   id: Schema.String,
@@ -37,6 +54,8 @@ const CompareRunSchema = Schema.Struct({
   /** The prompt every column received, shown once above the grid. */
   prompt: Schema.String,
   entries: Schema.Array(CompareRunEntrySchema),
+  merges: Schema.optionalKey(Schema.Array(CompareMergeSchema)),
+  excludedThreadIds: Schema.optionalKey(Schema.Array(ThreadId)),
 });
 export type CompareRun = typeof CompareRunSchema.Type;
 

@@ -1,3 +1,4 @@
+import type { ComparisonPickerConfig } from "./ComparisonProviderOptions";
 import { Toolbar } from "@base-ui/react/toolbar";
 import { type ProviderInstanceId } from "@t3tools/contracts";
 import { memo, useLayoutEffect, useRef, useState } from "react";
@@ -42,6 +43,7 @@ const PICKER_TOOLTIP_SIDE_OFFSET = 8;
 const PICKER_TOOLTIP_CLASS = "max-w-64 text-balance font-normal leading-snug";
 
 export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
+  comparison?: ComparisonPickerConfig;
   selectedInstanceId: ProviderInstanceId | "favorites";
   onSelectInstance: (instanceId: ProviderInstanceId | "favorites") => void;
   onFocusSearch: () => void;
@@ -90,7 +92,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
 
   return (
     <Toolbar.Root
-      className="w-11 shrink-0 overflow-hidden bg-muted/30"
+      className={cn("shrink-0 overflow-hidden bg-muted/30", props.comparison ? "w-19" : "w-11")}
       data-model-picker-sidebar="true"
       aria-label="Providers"
       orientation="vertical"
@@ -233,9 +235,26 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
             return (
               <div
                 key={entry.instanceId}
-                className="relative w-full"
+                className={cn("relative w-full", props.comparison && "flex items-center gap-1")}
                 data-model-picker-provider={entry.instanceId}
               >
+                {props.comparison ? (
+                  <input
+                    type="checkbox"
+                    className="size-4 shrink-0 accent-primary"
+                    aria-label={`Include ${entry.displayName} in comparison`}
+                    checked={props.comparison.selections.some(
+                      (selection) => selection.instanceId === entry.instanceId,
+                    )}
+                    disabled={
+                      (isDisabled || !props.comparison.canIncludeProvider(entry.instanceId)) &&
+                      !props.comparison.selections.some(
+                        (selection) => selection.instanceId === entry.instanceId,
+                      )
+                    }
+                    onChange={() => props.comparison?.onToggleProvider(entry.instanceId)}
+                  />
+                ) : null}
                 <Tooltip>
                   <TooltipTrigger render={trigger} />
                   <TooltipPopup
