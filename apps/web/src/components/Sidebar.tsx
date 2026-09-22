@@ -4845,12 +4845,7 @@ export default function Sidebar() {
                       ) => {
                         const { run } = group;
                         return (
-                          <ComparisonGroup
-                            key={run.id}
-                            run={run}
-                            threads={threads}
-                            output={group.output}
-                          >
+                          <ComparisonGroup key={run.id} run={run} threads={threads}>
                             {run.entries.map((entry) => {
                               const key = entry.threadId
                                 ? scopedThreadKey(scopeThreadRef(run.environmentId, entry.threadId))
@@ -4895,12 +4890,7 @@ export default function Sidebar() {
                         )
                           continue;
                         items.push(
-                          <ComparisonGroup
-                            key={run.id}
-                            run={run}
-                            threads={threads}
-                            output={run.merges?.at(-1)}
-                          >
+                          <ComparisonGroup key={run.id} run={run} threads={threads}>
                             {run.entries.map((entry, index) => (
                               <li key={index} className="px-2 py-2 text-xs text-muted-foreground">
                                 {entry.instanceId} ·{" "}

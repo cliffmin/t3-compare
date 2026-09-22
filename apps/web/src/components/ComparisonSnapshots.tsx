@@ -47,11 +47,6 @@ export function ComparisonSnapshots({ run }: { run: CompareRun }) {
           <CaptureThread key={entry.threadId} run={run} threadId={entry.threadId} />
         ) : null,
       )}
-      {run.merges?.map((merge) =>
-        !merge.output && !merge.startError ? (
-          <CaptureThread key={merge.threadId} run={run} threadId={merge.threadId} />
-        ) : null,
-      )}
     </>
   );
 }

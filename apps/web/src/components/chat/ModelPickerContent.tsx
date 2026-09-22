@@ -265,13 +265,36 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const [expandedLegacyInstances, setExpandedLegacyInstances] = useState(
     () =>
       new Set<ProviderInstanceId>(
-        modelOptionsByInstance
-          .get(props.activeInstanceId)
-          ?.some((model) => model.slug === activeModelSlug && model.isLegacy)
-          ? [props.activeInstanceId]
-          : [],
+        [...modelOptionsByInstance.entries()].flatMap(([instanceId, models]) =>
+          models.some(
+            (model) =>
+              model.isLegacy &&
+              selectedModelKeySet.has(modelPickerModelKey(instanceId, model.slug)),
+          )
+            ? [instanceId]
+            : [],
+        ),
       ),
   );
+  const manuallyToggledLegacy = useRef(new Set<ProviderInstanceId>());
+  useEffect(() => {
+    setExpandedLegacyInstances((expanded) => {
+      const selectedLegacy = [...modelOptionsByInstance.entries()].flatMap(
+        ([instanceId, models]) =>
+          !manuallyToggledLegacy.current.has(instanceId) &&
+          models.some(
+            (model) =>
+              model.isLegacy &&
+              selectedModelKeySet.has(modelPickerModelKey(instanceId, model.slug)),
+          )
+            ? [instanceId]
+            : [],
+      );
+      return selectedLegacy.some((id) => !expanded.has(id))
+        ? new Set([...expanded, ...selectedLegacy])
+        : expanded;
+    });
+  }, [modelOptionsByInstance, selectedModelKeySet]);
   const serverKeybindings = useAtomValue(primaryServerKeybindingsAtom);
   const keybindings = providedKeybindings ?? serverKeybindings;
   const updateSettings = useUpdateClientSettings();
@@ -587,6 +610,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       : [];
 
   const toggleLegacySection = useCallback((instanceId: ProviderInstanceId) => {
+    manuallyToggledLegacy.current.add(instanceId);
     setExpandedLegacyInstances((expanded) => {
       const next = new Set(expanded);
       if (next.has(instanceId)) {
@@ -1089,6 +1113,17 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                 No models found
               </ComboboxEmpty>
             )}
+            {props.comparison?.notices?.map((notice) => (
+              <p
+                key={notice.instanceId}
+                role="status"
+                className="px-3 py-2 text-xs text-amber-600 dark:text-amber-400"
+              >
+                {instanceEntries.find((entry) => entry.instanceId === notice.instanceId)
+                  ?.displayName ?? notice.instanceId}{" "}
+                · {notice.model}: {notice.reason}
+              </p>
+            ))}
             {props.comparison ? (
               <div
                 aria-label="Comparison configuration"
@@ -1100,7 +1135,10 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                     {instanceEntries.find((entry) => entry.instanceId === selection.instanceId)
                       ?.displayName ?? selection.instanceId}
                     {" · "}
-                    {comparisonSelectionSummary(selection)}
+                    {comparisonSelectionSummary(
+                      selection,
+                      props.comparison?.optionDescriptors?.(selection.instanceId, selection.model),
+                    )}
                   </p>
                 ))}
               </div>

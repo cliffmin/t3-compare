@@ -147,12 +147,12 @@ describe("comparison configuration dispatch", () => {
     expect(useCompareRunStore.getState().getRun(run.id)?.entries[0]?.options).toEqual([
       { id: "fastMode", value: false },
     ]);
-    expect(comparisonSelectionSummary(run.entries[0]!)).toContain("fast Mode: false");
+    expect(comparisonSelectionSummary(run.entries[0]!)).toContain("Fast mode: false");
     useCompareRunStore.getState().removeRun(run.id);
   });
 });
 
-it("snapshots supported default merger options and preserves explicit effort", () => {
+it("freezes comparison defaults without discarding explicit intent before validation", () => {
   const entry = deriveProviderInstanceEntries([
     provider("merger", {
       models: [
@@ -193,5 +193,5 @@ it("snapshots supported default merger options and preserves explicit effort", (
       createModelSelection(entry.instanceId, "model", [{ id: "reasoningEffort", value: "high" }]),
       true,
     ).options ?? [],
-  ).toEqual([]);
+  ).toEqual([{ id: "reasoningEffort", value: "high" }]);
 });

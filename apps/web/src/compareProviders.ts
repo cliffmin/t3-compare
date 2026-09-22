@@ -3,6 +3,7 @@ import type {
   ModelSelection,
   ProviderInstanceId,
   ProviderOptionSelection,
+  ProviderOptionDescriptor,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 
@@ -36,10 +37,21 @@ export function updateComparisonSelection(
     : [...selections, selection];
 }
 
-export function comparisonSelectionSummary(selection: ModelSelection): string {
+export function comparisonSelectionSummary(
+  selection: ModelSelection,
+  descriptors: ReadonlyArray<ProviderOptionDescriptor> = [],
+): string {
   const options =
     selection.options?.map(
-      (option) => `${option.id.replace(/([a-z])([A-Z])/g, "$1 $2")}: ${String(option.value)}`,
+      (option) =>
+        `${
+          descriptors.find((descriptor) => descriptor.id === option.id)?.label ??
+          option.id
+            .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+            .replace(/[_-]/g, " ")
+            .toLowerCase()
+            .replace(/^./, (letter) => letter.toUpperCase())
+        }: ${String(option.value)}`,
     ) ?? [];
   return [selection.model, ...(options.length > 0 ? options : ["Default options"])].join(" · ");
 }
@@ -67,5 +79,8 @@ export function withComparisonDefaults(
       return value === undefined ? [] : [{ id: descriptor.id, value }];
     },
   );
-  return createModelSelection(selection.instanceId, selection.model, options);
+  return createModelSelection(selection.instanceId, selection.model, [
+    ...options.filter((option) => !selection.options?.some((chosen) => chosen.id === option.id)),
+    ...(selection.options ?? []),
+  ]);
 }

@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
-import type { ModelSelection, ProviderInstanceId } from "@t3tools/contracts";
+import type {
+  ModelSelection,
+  ProviderInstanceId,
+  ProviderOptionDescriptor,
+} from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 import { TraitsPicker, shouldRenderTraitsControls } from "./TraitsPicker";
@@ -9,6 +13,11 @@ import { getProviderModelCapabilities } from "../../providerModels";
 export interface ComparisonPickerConfig {
   selections: ReadonlyArray<ModelSelection>;
   summarySelections: ReadonlyArray<ModelSelection>;
+  notices?: ReadonlyArray<{ instanceId: ProviderInstanceId; model: string; reason: string }>;
+  optionDescriptors?: (
+    instanceId: ProviderInstanceId,
+    model: string,
+  ) => ReadonlyArray<ProviderOptionDescriptor>;
   canIncludeProvider: (instanceId: ProviderInstanceId) => boolean;
   onToggleProvider: (instanceId: ProviderInstanceId) => void;
   onModelChange: (instanceId: ProviderInstanceId, model: string) => void;

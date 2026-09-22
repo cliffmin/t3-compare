@@ -1,3 +1,5 @@
+import { comparisonSendBlockReason, useComparisonPreferences } from "../comparisonPreferences";
+import { comparisonCatalogAtom } from "../state/comparisonCatalog";
 import { downloadChatAttachment } from "../attachmentActions";
 import { withComparisonDefaults } from "../compareProviders";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
@@ -7699,10 +7701,21 @@ export default function ChatView(props: ChatViewProps) {
       };
     };
 
+    const comparisonBlock = comparisonSendBlockReason(multipleModelSelections, {
+      ...appAtomRegistry.get(comparisonCatalogAtom(environmentId)),
+      planModeEnabled: settings.planModeEnabled,
+    });
+    if (comparisonBlock) {
+      setThreadError(threadIdForSend, comparisonBlock);
+      return;
+    }
     if (multipleModelSelections !== null && multipleModelSelections.length < 2) {
       setThreadError(threadIdForSend, "Select at least two available providers to compare.");
       return;
     }
+    const comparisonDraftKey = `${environmentId}:${draftId ?? ""}`;
+    const submittedComparisonPreferences =
+      useComparisonPreferences.getState().drafts[comparisonDraftKey];
     const multipleTargets = [];
     for (const selection of multipleModelSelections ?? []) {
       const provider = providerInstanceEntries.find(
@@ -8135,6 +8148,15 @@ export default function ChatView(props: ChatViewProps) {
         resetLocalDispatch();
         releasedComposer = true;
         await starts;
+        if (
+          failedSelections.length === 0 &&
+          appAtomRegistry.get(fanoutStateAtom).selections === multipleModelSelections &&
+          useComparisonPreferences.getState().drafts[comparisonDraftKey] ===
+            submittedComparisonPreferences
+        ) {
+          setMultipleModelSelections(null);
+          useComparisonPreferences.getState().clearDraft(comparisonDraftKey);
+        }
         if (failedSelections.length === 0 && turnUsesAttachmentUploads) {
           releaseDraftAttachments(composerAttachmentsSnapshot);
         }
@@ -8146,6 +8168,17 @@ export default function ChatView(props: ChatViewProps) {
         );
       } finally {
         const restoreFailedDraft = () => {
+          useComparisonPreferences.setState((state) => ({
+            drafts: {
+              ...state.drafts,
+              [comparisonDraftKey]: {
+                configurations:
+                  state.drafts[comparisonDraftKey]?.configurations ?? failedSelections,
+                checked: failedSelections.map((selection) => selection.instanceId),
+                reasons: state.drafts[comparisonDraftKey]?.reasons ?? {},
+              },
+            },
+          }));
           setMultipleModelSelections(failedSelections);
           if (clearedDraft) {
             setComposerDraftPrompt(composerDraftTarget, messageTextForSend);

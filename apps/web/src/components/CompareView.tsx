@@ -1,3 +1,4 @@
+import { cn } from "../lib/utils";
 import { scopeThreadRef, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useAtomValue } from "@effect/atom-react";
@@ -29,22 +30,12 @@ import { WorkspacePageHeader } from "./WorkspacePageHeader";
 import { CollapsibleUserMessageBody, USER_MESSAGE_BUBBLE_CLASS } from "./chat/MessagesTimeline";
 import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
 import { CompareThreadTimeline } from "./CompareThreadTimeline";
-import { CompareMergeView } from "./CompareMergeView";
 import ChatMarkdown from "./ChatMarkdown";
 import { Button } from "./ui/button";
+import { Tooltip, TooltipTrigger, TooltipPopup } from "./ui/tooltip";
 import { SidebarInset, SidebarTrigger } from "./ui/sidebar";
 
-export function CompareView({
-  run,
-  tab,
-  onTabChange,
-  mergeId,
-}: {
-  run: CompareRun;
-  tab: "originals" | "merged";
-  onTabChange: (tab: "originals" | "merged") => void;
-  mergeId?: string | undefined;
-}) {
+export function CompareView({ run }: { run: CompareRun }) {
   const configs = useAtomValue(environmentServerConfigsAtom);
   const settings = useEnvironmentSettings(run.environmentId);
   const providers = useMemo(
@@ -56,7 +47,6 @@ export function CompareView({
     [configs, run.environmentId, settings],
   );
   const [targetId, setTargetId] = useState<ThreadId | null>(null);
-  const hasHistory = Boolean(run.automatic || run.merges?.length);
   return (
     <SidebarInset className="h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-background text-foreground">
       <ComparisonHeader run={run} targetId={targetId} onTargetChange={setTargetId} />
@@ -64,8 +54,8 @@ export function CompareView({
         className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
         data-comparison-scroll
       >
-        <div className="flex justify-end px-4 py-4" aria-label="Shared comparison prompt">
-          <div className={USER_MESSAGE_BUBBLE_CLASS}>
+        <div className="flex justify-center px-4 py-4" aria-label="Shared comparison prompt">
+          <div className={cn(USER_MESSAGE_BUBBLE_CLASS, "w-fit max-w-[min(100%,48rem)] text-left")}>
             <CollapsibleUserMessageBody
               text={run.prompt}
               renderContextReference={() => null}
@@ -74,44 +64,22 @@ export function CompareView({
             />
           </div>
         </div>
-        {hasHistory ? (
-          <nav className="flex gap-2 px-4 pb-3" aria-label="Comparison history">
-            <Button
-              size="xs"
-              variant={tab === "originals" ? "secondary" : "ghost"}
-              onClick={() => onTabChange("originals")}
-            >
-              Compare providers
-            </Button>
-            <Button
-              size="xs"
-              variant={tab === "merged" ? "secondary" : "ghost"}
-              onClick={() => onTabChange("merged")}
-            >
-              Saved merged results
-            </Button>
-          </nav>
-        ) : null}
-        {tab === "merged" ? (
-          <CompareMergeView run={run} initialMergeId={mergeId} />
-        ) : (
-          <div
-            className="grid min-w-0 gap-px bg-border/70"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 26rem), 1fr))" }}
-            data-comparison-grid
-          >
-            {run.entries.map((entry, index) => (
-              <CompareColumn
-                key={entry.threadId ?? `${entry.instanceId}:${index}`}
-                run={run}
-                entry={entry}
-                provider={
-                  providers.find((provider) => provider.instanceId === entry.instanceId) ?? null
-                }
-              />
-            ))}
-          </div>
-        )}
+        <div
+          className="grid min-w-0 gap-px bg-border/70"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 26rem), 1fr))" }}
+          data-comparison-grid
+        >
+          {run.entries.map((entry, index) => (
+            <CompareColumn
+              key={entry.threadId ?? `${entry.instanceId}:${index}`}
+              run={run}
+              entry={entry}
+              provider={
+                providers.find((provider) => provider.instanceId === entry.instanceId) ?? null
+              }
+            />
+          ))}
+        </div>
       </div>
     </SidebarInset>
   );
@@ -148,6 +116,39 @@ function ComparisonHeader({
       });
   };
   const cwd = target?.worktreePath ?? null;
+  const workspaceControl = (
+    <label className="flex min-w-0 items-center gap-2 text-xs no-drag">
+      Workspace:
+      <Tooltip>
+        <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
+          <select
+            aria-label="Workspace action target"
+            className="max-w-44 rounded border border-border bg-background p-1.5"
+            value={targetId ?? ""}
+            onChange={(event) =>
+              onTargetChange(
+                run.entries.find((entry) => entry.threadId === event.target.value)?.threadId ??
+                  null,
+              )
+            }
+          >
+            <option value="">Choose provider</option>
+            {run.entries
+              .filter((entry) => entry.threadId)
+              .map((entry) => (
+                <option key={entry.threadId} value={entry.threadId!}>
+                  {entry.label ?? entry.instanceId} · {entry.model}
+                </option>
+              ))}
+          </select>
+        </TooltipTrigger>
+        <TooltipPopup>
+          Choose the provider workspace for Open, Git, and script actions. This does not change
+          which providers receive your prompt.
+        </TooltipPopup>
+      </Tooltip>
+    </label>
+  );
   return (
     <WorkspacePageHeader
       electron={typeof window !== "undefined" && Boolean(window.desktopBridge)}
@@ -157,6 +158,7 @@ function ComparisonHeader({
       {target && project && cwd ? (
         <ChatHeader
           wrapActions
+          workspaceControl={workspaceControl}
           activeThreadEnvironmentId={run.environmentId}
           activeThreadId={target.id}
           activeThreadTitle={run.title ?? comparisonFallbackTitle(run.prompt)}
@@ -184,28 +186,7 @@ function ComparisonHeader({
         </ChatHeaderBreadcrumb>
       )}
 
-      <label className="flex min-w-0 items-center gap-2 text-xs no-drag">
-        Actions for
-        <select
-          aria-label="Workspace action target"
-          className="max-w-44 rounded border border-border bg-background p-1.5"
-          value={targetId ?? ""}
-          onChange={(event) =>
-            onTargetChange(
-              run.entries.find((entry) => entry.threadId === event.target.value)?.threadId ?? null,
-            )
-          }
-        >
-          <option value="">Choose provider</option>
-          {run.entries
-            .filter((entry) => entry.threadId)
-            .map((entry) => (
-              <option key={entry.threadId} value={entry.threadId!}>
-                {entry.label ?? entry.instanceId} · {entry.model}
-              </option>
-            ))}
-        </select>
-      </label>
+      {!target || !project || !cwd ? workspaceControl : null}
       {!cwd ? (
         <span className="text-xs text-muted-foreground">
           {targetId ? "Workspace unavailable" : "Choose a workspace to enable actions"}

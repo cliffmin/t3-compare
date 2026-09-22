@@ -1,4 +1,16 @@
-import { withComparisonDefaults } from "../../compareProviders";
+import { useAtomValue } from "@effect/atom-react";
+import { getProviderModelCapabilities } from "../../providerModels";
+import {
+  useComparisonPreferences,
+  EMPTY_COMPARISON_PREFERENCES,
+  checkedComparisonSelections,
+  editComparisonPreferences,
+  reconcileComparisonPreferences,
+  freezeComparisonSelection,
+  validateComparisonSelection,
+  comparisonSendBlockReason,
+} from "../../comparisonPreferences";
+import { comparisonCatalogAtom } from "../../state/comparisonCatalog";
 import { Switch } from "../ui/switch";
 import { DESKTOP_PASTE_AS_TEXT_EVENT } from "../../lib/desktopPasteAsText";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
@@ -248,7 +260,7 @@ import {
 import { useEnvironmentQuery } from "~/state/query";
 import { useDebouncedValue } from "~/state/queries";
 import { ProviderModelPicker } from "./ProviderModelPicker";
-import { selectComparisonModels, updateComparisonSelection } from "../../compareProviders";
+import { selectComparisonModels } from "../../compareProviders";
 import {
   ComparisonProviderOptions,
   type ComparisonPickerConfig,
@@ -1909,7 +1921,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     selectedProviderEntry?.snapshot,
     selectedModel,
   );
+  const comparisonCatalogState = useAtomValue(comparisonCatalogAtom(environmentId));
+  const comparisonCatalog = useMemo(
+    () => ({ ...comparisonCatalogState, planModeEnabled: settings.planModeEnabled }),
+    [comparisonCatalogState, settings.planModeEnabled],
+  );
   const sendDisabledReason =
+    comparisonSendBlockReason(multipleModelSelections, comparisonCatalog) ??
     externalSendDisabledReason ??
     (multipleModelSelections !== null && multipleModelSelections.length < 2
       ? "Select at least two providers."
@@ -4939,36 +4957,32 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ],
   );
   const comparisonKey = `${environmentId}:${draftId ?? ""}`;
-  const [comparisonMemory, setComparisonMemory] = useState<
-    Record<
-      string,
-      {
-        configurations: ReadonlyArray<ModelSelection>;
-        checked?: ReadonlyArray<ModelSelection>;
-      }
-    >
-  >({});
-  const rememberedComparison = comparisonMemory[comparisonKey];
+  const draftComparison = useComparisonPreferences((state) => state.drafts[comparisonKey]);
+  const rememberedComparison = useComparisonPreferences(
+    (state) => state.environments[environmentId],
+  );
+  const activeComparison = draftComparison ?? rememberedComparison ?? EMPTY_COMPARISON_PREFERENCES;
+  useEffect(() => {
+    useComparisonPreferences.getState().reconcile(comparisonKey, environmentId, comparisonCatalog);
+  }, [comparisonKey, environmentId, comparisonCatalog]);
+  useEffect(() => {
+    if (!draftComparison) return;
+    const checked = checkedComparisonSelections(draftComparison);
+    setMultipleModelSelections((current) =>
+      current === null || JSON.stringify(checked) === JSON.stringify(current) ? current : checked,
+    );
+  }, [draftComparison, setMultipleModelSelections]);
   const getComparisonSelection = (instanceId: ProviderInstanceId) =>
+    activeComparison.configurations.find((selection) => selection.instanceId === instanceId) ??
     multipleModelSelections?.find((selection) => selection.instanceId === instanceId) ??
-    rememberedComparison?.configurations.find((selection) => selection.instanceId === instanceId) ??
     (instanceId === selectedModelSelection.instanceId ? selectedModelSelection : undefined) ??
     comparisonModels.find((selection) => selection.instanceId === instanceId);
-  const changeComparisonSelection = (selection: ModelSelection) => {
-    setComparisonMemory((memory) => ({
-      ...memory,
-      [comparisonKey]: {
-        ...memory[comparisonKey],
-        configurations: updateComparisonSelection(
-          memory[comparisonKey]?.configurations ?? [],
-          selection,
-        ),
-      },
-    }));
+  const changeComparisonSelection = (selection: ModelSelection, checked?: boolean) => {
+    const frozen = freezeComparisonSelection(selection, comparisonCatalog);
+    const value = editComparisonPreferences(activeComparison, frozen, checked);
+    useComparisonPreferences.getState().editDraft(comparisonKey, environmentId, value);
     setMultipleModelSelections((current) =>
-      current?.some((item) => item.instanceId === selection.instanceId)
-        ? updateComparisonSelection(current, selection)
-        : current,
+      current === null ? null : checkedComparisonSelections(value),
     );
   };
   const comparison: ComparisonPickerConfig | undefined =
@@ -4976,50 +4990,55 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       ? undefined
       : {
           selections: multipleModelSelections,
-          summarySelections: multipleModelSelections.map((selection) => {
-            const entry = providerInstanceEntries.find(
-              (item) => item.instanceId === selection.instanceId,
-            );
-            return entry
-              ? createModelSelection(
-                  selection.instanceId,
-                  selection.model,
-                  getComposerProviderState({
-                    provider: entry.driverKind,
-                    model: selection.model,
-                    models: entry.models,
-                    modelOptions: withComparisonDefaults(entry, selection, settings.planModeEnabled)
-                      .options,
-                    promptInjectionState: composerPromptInjectionState,
-                    planModeEnabled: settings.planModeEnabled,
-                  }).modelOptionsForDispatch,
-                )
-              : selection;
+          summarySelections: multipleModelSelections,
+          notices: activeComparison.configurations.flatMap((selection) => {
+            const result = validateComparisonSelection(selection, comparisonCatalog);
+            const reason =
+              activeComparison.reasons[selection.instanceId] ??
+              (result.status !== "valid" ? result.reason : null);
+            return reason
+              ? [{ instanceId: selection.instanceId, model: selection.model, reason }]
+              : [];
           }),
-          canIncludeProvider: (instanceId) =>
-            comparisonModels.some((selection) => selection.instanceId === instanceId),
+          optionDescriptors: (instanceId, model) => {
+            const entry = providerInstanceEntries.find((item) => item.instanceId === instanceId);
+            return entry
+              ? (getProviderModelCapabilities(
+                  entry.models,
+                  model,
+                  entry.driverKind,
+                  settings.planModeEnabled,
+                ).optionDescriptors ?? [])
+              : [];
+          },
+          canIncludeProvider: (instanceId) => {
+            if (activeComparison.checked.includes(instanceId)) return true;
+            const selection = getComparisonSelection(instanceId);
+            return (
+              selection !== undefined &&
+              validateComparisonSelection(selection, comparisonCatalog).status === "valid"
+            );
+          },
           onToggleProvider: (instanceId) => {
             const selection = getComparisonSelection(instanceId);
             if (!selection) return;
-            changeComparisonSelection(selection);
-            setMultipleModelSelections((current) =>
-              current === null
-                ? null
-                : current.some((item) => item.instanceId === instanceId)
-                  ? current.filter((item) => item.instanceId !== instanceId)
-                  : [...current, selection],
-            );
+            changeComparisonSelection(selection, !activeComparison.checked.includes(instanceId));
           },
           onModelChange: (instanceId, model) => {
             const previous = getComparisonSelection(instanceId);
             changeComparisonSelection(
-              previous?.model === model ? previous : createModelSelection(instanceId, model),
+              previous?.model === model &&
+                validateComparisonSelection(previous, comparisonCatalog).status === "valid"
+                ? previous
+                : createModelSelection(instanceId, model),
             );
           },
           renderOptions: (instanceId) => {
             const entry = providerInstanceEntries.find((item) => item.instanceId === instanceId);
             const selection = getComparisonSelection(instanceId);
-            return entry && selection ? (
+            return entry &&
+              selection &&
+              validateComparisonSelection(selection, comparisonCatalog).status === "valid" ? (
               <ComparisonProviderOptions
                 entry={entry}
                 selection={selection}
@@ -5031,19 +5050,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         };
   const toggleComparison = () => {
     if (multipleModelSelections !== null) {
-      setComparisonMemory((memory) => ({
-        ...memory,
-        [comparisonKey]: {
-          configurations: multipleModelSelections.reduce(
-            (configs, selection) => updateComparisonSelection(configs, selection),
-            memory[comparisonKey]?.configurations ?? [],
-          ),
-          checked: multipleModelSelections,
-        },
-      }));
       setMultipleModelSelections(null);
     } else {
-      setMultipleModelSelections(rememberedComparison?.checked ?? [selectedModelSelection]);
+      const initial = freezeComparisonSelection(selectedModelSelection, comparisonCatalog);
+      const fallback = editComparisonPreferences(EMPTY_COMPARISON_PREFERENCES, initial, true);
+      const opened = useComparisonPreferences
+        .getState()
+        .openDraft(comparisonKey, environmentId, fallback);
+      const restored = reconcileComparisonPreferences(opened, comparisonCatalog);
+      useComparisonPreferences.getState().editDraft(comparisonKey, environmentId, restored);
+      setMultipleModelSelections(checkedComparisonSelections(restored));
       setIsComposerModelPickerOpen(true);
     }
   };
@@ -5055,11 +5071,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           aria-label="Compare providers"
           checked={multipleModelSelections !== null}
           aria-checked={multipleModelSelections !== null}
-          disabled={
-            providerCatalogPending ||
-            isSendBusy ||
-            (multipleModelSelections === null && comparisonModels.length < 2)
-          }
+          disabled={isSendBusy}
           onCheckedChange={toggleComparison}
         />
         Compare

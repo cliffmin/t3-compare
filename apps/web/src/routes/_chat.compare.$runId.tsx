@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate, useParams } from "@tanstack/react-router";
 
 import { CompareView } from "../components/CompareView";
 import { useCompareRunStore } from "../compareRunStore";
@@ -9,7 +9,6 @@ import { SidebarInset } from "../components/ui/sidebar";
 function CompareRouteView() {
   const { runId } = useParams({ from: "/_chat/compare/$runId" });
   const navigate = useNavigate();
-  const search = Route.useSearch();
   // Subscribed rather than read once: recording the run and navigating to it
   // race, so the grid must re-render when the run lands.
   const run = useCompareRunStore((state) => state.runs.find((candidate) => candidate.id === runId));
@@ -33,24 +32,7 @@ function CompareRouteView() {
     );
   }
 
-  return (
-    <CompareView
-      key={run.id}
-      run={run}
-      mergeId={search.merge}
-      tab={search.tab === "merged" ? "merged" : "originals"}
-      onTabChange={(tab) =>
-        void navigate({
-          to: "/compare/$runId",
-          params: { runId },
-          search: {
-            tab: tab === "merged" ? "merged" : "compare",
-            ...(search.merge ? { merge: search.merge } : {}),
-          },
-        })
-      }
-    />
-  );
+  return <CompareView key={run.id} run={run} />;
 }
 
 export const Route = createFileRoute("/_chat/compare/$runId")({
@@ -60,5 +42,9 @@ export const Route = createFileRoute("/_chat/compare/$runId")({
     tab: search.tab === "merged" ? "merged" : "compare",
     ...(typeof search.merge === "string" ? { merge: search.merge } : {}),
   }),
+  beforeLoad: ({ search, params }) => {
+    if (search.tab === "merged" || search.merge)
+      throw redirect({ to: "/compare/$runId", params, search: { tab: "compare" }, replace: true });
+  },
   component: CompareRouteView,
 });
