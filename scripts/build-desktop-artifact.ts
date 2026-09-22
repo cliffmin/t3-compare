@@ -3396,6 +3396,89 @@ export function createDesktopSigningEnvironment(
   return buildEnv;
 }
 
+/** Validate the output even when electron-builder silently skips its custom sign hook. */
+export const validateLocalMacPackagedPayload = Effect.fn("validateLocalMacPackagedPayload")(
+  function* (stageDistDir: string, productName: string, identity: string) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const fingerprint = yield* Effect.try({
+      try: () => normalizeLocalSigningIdentity(identity),
+      catch: localSigningError,
+    });
+    const apps: string[] = [];
+    for (const entry of yield* fs.readDirectory(stageDistDir)) {
+      const appPath = path.join(stageDistDir, entry, `${productName}.app`);
+      const stat = yield* fs.stat(appPath).pipe(Effect.orElseSucceed(() => null));
+      if (stat?.type === "Directory") apps.push(appPath);
+    }
+    if (apps.length !== 1) {
+      return yield* new LocalMacSigningError({
+        message:
+          "Local signing verification requires exactly one staged macOS app; no artifacts were delivered.",
+      });
+    }
+    // Check nested integrity first; the top-level identifier requirement must not apply to helpers.
+    const appPath = apps[0]!;
+    const requirement = `=identifier "${DESKTOP_APP_ID}" and certificate leaf = H"${fingerprint}"`;
+    for (const args of [
+      ["--verify", "--deep", "--strict", appPath],
+      ["--verify", "--strict", "--test-requirement", requirement, appPath],
+    ]) {
+      const verification = yield* spawnAndCollectOutput(
+        ChildProcess.make("/usr/bin/codesign", args),
+      );
+      if (verification.exitCode !== 0) {
+        return yield* new LocalMacSigningError({
+          message:
+            "Local signing output failed strict integrity or exact certificate/bundle identity verification; no artifacts were delivered.",
+        });
+      }
+    }
+  },
+);
+
+export const deliverDesktopArtifacts = Effect.fn("deliverDesktopArtifacts")(function* (input: {
+  readonly stageDistDir: string;
+  readonly outputDir: string;
+  readonly platform: typeof BuildPlatform.Type;
+  readonly arch: typeof BuildArch.Type;
+  readonly productName: string;
+  readonly localSigningIdentity?: string;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  if (input.localSigningIdentity !== undefined) {
+    yield* validateLocalMacPackagedPayload(
+      input.stageDistDir,
+      input.productName,
+      input.localSigningIdentity,
+    );
+  }
+  const stageEntries = yield* fs.readDirectory(input.stageDistDir);
+  yield* fs.makeDirectory(input.outputDir, { recursive: true });
+
+  const copiedArtifacts: string[] = [];
+  for (const entry of stageEntries) {
+    const from = path.join(input.stageDistDir, entry);
+    const stat = yield* fs.stat(from).pipe(Effect.orElseSucceed(() => null));
+    if (!stat || stat.type !== "File") continue;
+
+    const to = path.join(input.outputDir, entry);
+    yield* fs.copyFile(from, to);
+    copiedArtifacts.push(to);
+  }
+
+  if (copiedArtifacts.length === 0) {
+    return yield* new DesktopBuildNoArtifactsProducedError({
+      distPath: input.stageDistDir,
+      platform: input.platform,
+      arch: input.arch,
+    });
+  }
+
+  return copiedArtifacts;
+});
+
 const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   options: ResolvedBuildOptions,
 ) {
@@ -3900,27 +3983,14 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     });
   }
 
-  const stageEntries = yield* fs.readDirectory(stageDistDir);
-  yield* fs.makeDirectory(options.outputDir, { recursive: true });
-
-  const copiedArtifacts: string[] = [];
-  for (const entry of stageEntries) {
-    const from = path.join(stageDistDir, entry);
-    const stat = yield* fs.stat(from).pipe(Effect.orElseSucceed(() => null));
-    if (!stat || stat.type !== "File") continue;
-
-    const to = path.join(options.outputDir, entry);
-    yield* fs.copyFile(from, to);
-    copiedArtifacts.push(to);
-  }
-
-  if (copiedArtifacts.length === 0) {
-    return yield* new DesktopBuildNoArtifactsProducedError({
-      distPath: stageDistDir,
-      platform: options.platform,
-      arch: options.arch,
-    });
-  }
+  const copiedArtifacts = yield* deliverDesktopArtifacts({
+    stageDistDir,
+    outputDir: options.outputDir,
+    platform: options.platform,
+    arch: options.arch,
+    productName: resolveDesktopProductName(appVersion),
+    ...(options.localSigningIdentity ? { localSigningIdentity: options.localSigningIdentity } : {}),
+  });
 
   yield* Effect.log("[desktop-artifact] Done. Artifacts:").pipe(
     Effect.annotateLogs({ artifacts: copiedArtifacts }),

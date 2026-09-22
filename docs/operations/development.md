@@ -223,7 +223,9 @@ vp run dist:desktop:artifact --platform mac --target zip --arch arm64 \
 `T3CODE_DESKTOP_LOCAL_SIGNING_IDENTITY` is the environment equivalent. CLI takes precedence.
 Local signing is macOS-only (zip, dmg or dir), cannot be combined with `--signed`, disables
 notarization/timestamp services and imported distribution credentials, and fails if the exact
-identity is unavailable. It never falls back to ad-hoc signing or another certificate.
+identity is unavailable. It verifies the staged app's strict signature integrity and exact signer/bundle
+identity before copying artifacts to the output directory. It never delivers an ad-hoc or differently
+signed app as a successful local signing build.
 
 Keep using this exact certificate/private key for future packages; recreating its name changes
 the identity. Record its expiry and preserve a secure private-key backup outside the repository

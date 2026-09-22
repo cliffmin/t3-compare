@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off - Tests use Node's glob matcher to verify electron-builder exclusions.
+import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
 
@@ -23,6 +24,7 @@ import {
   createStagePatchedDependencies,
   createBuildConfig,
   createDesktopSigningEnvironment,
+  deliverDesktopArtifacts,
   LocalMacSigningError,
   DESKTOP_ELECTRON_LANGUAGES,
   DESKTOP_FILE_EXCLUSIONS,
@@ -2097,6 +2099,172 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       cause,
     );
   });
+
+  it.effect(
+    "blocks artifact delivery when the installed packager skips the custom signing hook",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "local-signing-missing-" });
+        const stageDistDir = path.join(root, "stage");
+        const appOutDir = path.join(stageDistDir, "mac-arm64");
+        yield* fs.makeDirectory(path.join(appOutDir, "T3 Compare.app"), { recursive: true });
+        yield* fs.writeFileString(
+          path.join(stageDistDir, "fixture.zip"),
+          "unsigned staging fixture",
+        );
+        // Exercise the actual installed CJS classes in an isolated process. No signing or Keychain calls.
+        const repro = `
+        const { createRequire } = require('node:module');
+        const path = require('node:path');
+        const desktopRequire = createRequire(process.argv[1]);
+        const builderRequire = createRequire(desktopRequire.resolve('electron-builder'));
+        const root = path.dirname(builderRequire.resolve('app-builder-lib'));
+        require(path.join(root, 'index.js'));
+        const cs = require(path.join(root, 'codeSign/macCodeSign.js'));
+        cs.findIdentity = async () => null;
+        let reportErrorCalled = false;
+        cs.reportError = async () => { reportErrorCalled = true; throw Error('missing identity'); };
+        cs.isSignAllowed = () => true;
+        const { MacTargetHelper } = require(path.join(root, 'mac/MacTargetHelper.js'));
+        const { MacPackager } = require(path.join(root, 'macPackager.js'));
+        (async () => {
+          const config = { identity: 'A'.repeat(40), sign: '/fixture/sign-macos.ts' };
+          const helper = new MacTargetHelper({ forceCodeSigning: true });
+          let hookCalled = false;
+          const fake = {
+            appInfo: { productFilename: 'T3 Compare' },
+            platformSpecificBuildOptions: config, codeSigningInfo: { value: Promise.resolve({}) }, helper,
+            doSign: async () => { hookCalled = true; throw Error('must not sign'); },
+            sign: MacPackager.prototype.sign,
+          };
+          const signReturn = await fake.sign('/fixture/T3 Compare.app', null, config, 1, false);
+          const signAppReturn = await MacPackager.prototype.signApp.call(fake, { appOutDir: process.argv[2], electronPlatformName: 'darwin', arch: 1 }, false);
+          console.log(JSON.stringify({ signReturn, signAppReturn, hookCalled, reportErrorCalled }));
+        })().catch(e => { console.error(e); process.exitCode = 1; });
+      `;
+        const result = NodeChildProcess.execFileSync(
+          process.execPath,
+          [
+            "-e",
+            repro,
+            NodePath.resolve(import.meta.dirname, "../apps/desktop/package.json"),
+            appOutDir,
+          ],
+          { encoding: "utf8" },
+        );
+        assert.equal(
+          result.trim(),
+          '{"signReturn":false,"signAppReturn":true,"hookCalled":false,"reportErrorCalled":false}',
+        );
+        const outputDir = path.join(root, "delivery");
+        yield* fs.makeDirectory(outputDir);
+        yield* fs.writeFileString(
+          path.join(outputDir, "existing.zip"),
+          "preserve previous delivery",
+        );
+        const commands: Array<{ command: string; args: ReadonlyArray<string> }> = [];
+        const error = yield* Effect.flip(
+          deliverDesktopArtifacts({
+            stageDistDir,
+            outputDir,
+            platform: "mac",
+            arch: "arm64",
+            productName: "T3 Compare",
+            localSigningIdentity: "A".repeat(40),
+          }).pipe(Effect.provide(iconResizeSpawnerLayer(commands, [1]))),
+        );
+        assert.instanceOf(error, LocalMacSigningError);
+        assert.deepStrictEqual(yield* fs.readDirectory(outputDir), ["existing.zip"]);
+        assert.equal(
+          yield* fs.readFileString(path.join(outputDir, "existing.zip")),
+          "preserve previous delivery",
+        );
+        assert.deepStrictEqual(commands[0], {
+          command: "/usr/bin/codesign",
+          args: ["--verify", "--deep", "--strict", path.join(appOutDir, "T3 Compare.app")],
+        });
+      }),
+  );
+
+  it.effect(
+    "requires exact top-level signer after integrity verification for every macOS architecture",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        for (const arch of ["arm64", "x64", "universal"] as const) {
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "local-signing-output-" });
+          const stageDistDir = path.join(root, "stage");
+          const appPath = path.join(
+            stageDistDir,
+            arch === "x64" ? "mac" : `mac-${arch}`,
+            "T3 Compare.app",
+          );
+          yield* fs.makeDirectory(appPath, { recursive: true });
+          yield* fs.writeFileString(path.join(stageDistDir, "fixture.zip"), "package fixture");
+          const outputDir = path.join(root, "delivery");
+          const input = {
+            stageDistDir,
+            outputDir,
+            platform: "mac" as const,
+            arch,
+            productName: "T3 Compare",
+            localSigningIdentity: "A".repeat(40),
+          };
+          const commands: Array<{ command: string; args: ReadonlyArray<string> }> = [];
+          const error = yield* Effect.flip(
+            deliverDesktopArtifacts(input).pipe(
+              Effect.provide(iconResizeSpawnerLayer(commands, [0, 1])),
+            ),
+          );
+          assert.instanceOf(error, LocalMacSigningError);
+          assert.equal(yield* fs.exists(outputDir), false);
+          assert.deepStrictEqual(commands[1], {
+            command: "/usr/bin/codesign",
+            args: [
+              "--verify",
+              "--strict",
+              "--test-requirement",
+              `=identifier "com.cliffmin.t3compare" and certificate leaf = H"${"A".repeat(40)}"`,
+              appPath,
+            ],
+          });
+          const delivered = yield* deliverDesktopArtifacts(input).pipe(
+            Effect.provide(iconResizeSpawnerLayer([], [0, 0])),
+          );
+          assert.deepStrictEqual(delivered, [path.join(outputDir, "fixture.zip")]);
+          assert.equal(yield* fs.readFileString(delivered[0]!), "package fixture");
+        }
+      }),
+  );
+
+  it.effect("refuses local artifact delivery without exactly one staged app", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "local-signing-app-count-" });
+      const stageDistDir = path.join(root, "stage");
+      yield* fs.makeDirectory(stageDistDir);
+      yield* fs.writeFileString(path.join(stageDistDir, "fixture.zip"), "fixture");
+      const input = {
+        stageDistDir,
+        outputDir: path.join(root, "delivery"),
+        platform: "mac" as const,
+        arch: "arm64" as const,
+        productName: "T3 Compare",
+        localSigningIdentity: "A".repeat(40),
+      };
+      assert.instanceOf(yield* Effect.flip(deliverDesktopArtifacts(input)), LocalMacSigningError);
+      for (const dir of ["mac", "mac-arm64"])
+        yield* fs.makeDirectory(path.join(stageDistDir, dir, "T3 Compare.app"), {
+          recursive: true,
+        });
+      assert.instanceOf(yield* Effect.flip(deliverDesktopArtifacts(input)), LocalMacSigningError);
+      assert.equal(yield* fs.exists(input.outputDir), false);
+    }),
+  );
 
   it.effect("keeps local signing separate from distribution and ad-hoc modes", () =>
     Effect.gen(function* () {
