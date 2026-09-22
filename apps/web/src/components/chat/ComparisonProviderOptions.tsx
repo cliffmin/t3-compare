@@ -7,6 +7,8 @@ import { withImplicitFastModeDefault } from "./composerProviderState";
 import { getProviderModelCapabilities } from "../../providerModels";
 
 export interface ComparisonPickerConfig {
+  mergerSettings?: ReactNode;
+  mergerSummary?: ReactNode;
   selections: ReadonlyArray<ModelSelection>;
   summarySelections: ReadonlyArray<ModelSelection>;
   canIncludeProvider: (instanceId: ProviderInstanceId) => boolean;

@@ -1,3 +1,4 @@
+import { AUTOMATIC_COMPARISON_LABEL } from "../automaticComparison";
 import { useComparisonMergeDraft } from "../useComparisonMergeDraft";
 import { useMemo, useRef, useState } from "react";
 import type { ProjectId, ThreadId } from "@t3tools/contracts";
@@ -220,7 +221,7 @@ export function CompareMergeView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
-      {setupOpen || !merge ? (
+      {!run.automatic && (setupOpen || !merge) ? (
         <section
           className="mx-auto mb-5 flex w-full max-w-3xl flex-col gap-3 rounded-lg border border-border p-4"
           aria-label="Merge setup"
@@ -301,6 +302,49 @@ export function CompareMergeView({
           </div>
         </section>
       ) : null}
+      {run.automatic && run.automatic.status !== "completed" ? (
+        <section
+          className="mx-auto mb-4 w-full max-w-3xl rounded-lg border border-border p-4"
+          aria-label="Automatic merge status"
+        >
+          <h2 className="text-sm font-semibold">
+            {AUTOMATIC_COMPARISON_LABEL[run.automatic.status]}
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {run.automatic.error ??
+              (run.automatic.status === "insufficient"
+                ? "Fewer than two included providers produced a completed answer. No merge was sent. Start a new comparison to try again."
+                : "Original answers are preserved. The merged answer will appear here without changing your current view.")}
+          </p>
+          {run.automatic.status === "failed" ? (
+            <Button
+              size="sm"
+              className="mt-3"
+              onClick={() => {
+                useCompareRunStore.getState().updateRun(run.id, (current) =>
+                  current.automatic?.status === "failed"
+                    ? {
+                        ...current,
+                        automatic: {
+                          config: current.automatic.config,
+                          attempt: (current.automatic.attempt ?? 0) + 1,
+                          status: "waiting",
+                        },
+                      }
+                    : current,
+                );
+                void navigate({
+                  to: "/compare/$runId",
+                  params: { runId: run.id },
+                  search: { tab: "merged" },
+                });
+              }}
+            >
+              Retry merge
+            </Button>
+          ) : null}
+        </section>
+      ) : null}
       {error ? (
         <p role="alert" className="mx-auto mb-3 w-full max-w-3xl text-sm text-destructive">
           {error}
@@ -361,19 +405,21 @@ export function CompareMergeView({
               >
                 {copied ? "Copied" : "Copy answer"}
               </Button>
-              <Button
-                size="xs"
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  setInstructions(merge.instructions);
-                  setDirection(merge.direction);
-                  setChosen(merge.modelSelection);
-                  onSetupOpenChange(true);
-                }}
-              >
-                Refine merge
-              </Button>
+              {!run.automatic ? (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    setInstructions(merge.instructions);
+                    setDirection(merge.direction);
+                    setChosen(merge.modelSelection);
+                    onSetupOpenChange(true);
+                  }}
+                >
+                  Refine merge
+                </Button>
+              ) : null}
               <Button
                 size="xs"
                 variant="outline"

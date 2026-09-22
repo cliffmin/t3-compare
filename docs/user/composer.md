@@ -30,29 +30,33 @@ while this draft stays open. It does not stop comparisons already running.
 Expand a comparison in the sidebar to reopen its provider conversations. Sessions
 in another pinned, snoozed, or settled section keep their existing locations. The
 parent opens the original answers; continuing a provider conversation does not
-replace them. A completed merge adds an output link with the number of answers
+replace them. The merged-answer child shows progress and then the number of answers
 actually included. Groups and saved outputs are stored on this client, so they
 are not shared across devices and can be lost when site data is cleared.
 
 ### Merge the answers
 
-In a comparison, check **Include in merge** on the completed answers you want to
-combine, then choose **Merge best answer**. Select the provider, model, and options
-for the merge. Additional direction is optional: the default instructions infer
-the goal and answer format from your original question. Expand **Review merge
-instructions** to edit that guidance before generating.
+Before sending, choose the merger's provider, model, and supported options under
+**Merge answer** inside the comparison picker. Additional direction is optional
+and applies to this prompt. The merger selection is remembered for future comparisons.
 
-The **Merged** tab streams the combined response. Provider labels link to
-recorded passages from the answers used in that merge. Labels identify where an
-idea came from, not whether it has been independently verified. New deductions
-and unresolved disagreements are marked separately.
+Once all original providers finish or fail, the app automatically combines successful,
+nonempty answers. At least two included answers are required. Failed or stopped answers
+remain available to read but are excluded. You can exclude completed answers while others
+are still running; the inputs lock when the merge starts. Continuing a provider conversation
+does not change those original inputs or silently start another merge.
 
-Use **Copy answer** to take the result to another agent, or **Refine merge** to
-add direction and generate another version. Original answers and earlier merge
-versions remain available. Each merge is also saved as a thread; open it to handle
-provider approvals, investigate an error, or stop generation. At least two
-completed, nonempty answers are needed. Oversized inputs are rejected instead of
-being silently shortened.
+Open the merged-answer child in the sidebar to read the result. Provider labels link to
+recorded source passages; they show where an idea came from, not independent verification.
+Use **Copy answer** to take the result to another agent, or **Open thread** to continue,
+handle an approval, investigate an error, or stop generation. A failed merge offers an
+explicit retry. Uncertain delivery requires inspecting its thread rather than blindly
+sending again. Oversized inputs are rejected instead of silently shortened.
+
+Automatic initiation resumes when this client is open. It requires writable browser storage
+and browser locking; unsupported contexts show an explanation and send no merge request.
+Use localhost or a supported secure connection. Original provider threads remain available.
+Older manual comparisons retain their merge setup and saved versions.
 
 ## Attach files
 

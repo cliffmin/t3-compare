@@ -97,6 +97,33 @@ function mergeThread() {
 }
 
 describe("comparison snapshots", () => {
+  it("waits for terminal session settlement before freezing interrupted partial text", () => {
+    const initial = run();
+    const active = {
+      ...thread(),
+      latestTurn: { ...thread().latestTurn, state: "interrupted" as const },
+      session: {
+        threadId: ThreadId.make("a"),
+        status: "running" as const,
+        providerName: "codex" as const,
+        runtimeMode: "full-access" as const,
+        activeTurnId: TurnId.make("one"),
+        lastError: null,
+        updatedAt: createdAt,
+      },
+    };
+    expect(captureComparisonThread(initial, active)).toBe(initial);
+    const saved = captureComparisonThread(initial, {
+      ...active,
+      session: { ...active.session, status: "interrupted", activeTurnId: null },
+      messages: [message("user", "Compare approaches"), message("assistant", "Final partial text")],
+    });
+    expect(saved.entries[0]?.original).toMatchObject({
+      status: "interrupted",
+      messages: [expect.objectContaining({ text: "Final partial text" })],
+    });
+  });
+
   it("keeps the original answer when its conversation continues", () => {
     const saved = captureComparisonThread(run(), thread());
     const followup = {

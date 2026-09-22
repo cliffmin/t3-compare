@@ -4874,6 +4874,42 @@ export default function Sidebar() {
                           </ComparisonGroup>
                         );
                       };
+                      for (const run of comparisonRuns) {
+                        if (
+                          !run.automatic ||
+                          !run.projectId ||
+                          (scopedProjectKeys &&
+                            !scopedProjectKeys.has(`${run.environmentId}:${run.projectId}`))
+                        )
+                          continue;
+                        if (
+                          run.entries.some(
+                            (entry) =>
+                              entry.threadId &&
+                              threads.some(
+                                (thread) =>
+                                  thread.environmentId === run.environmentId &&
+                                  thread.id === entry.threadId,
+                              ),
+                          )
+                        )
+                          continue;
+                        items.push(
+                          <ComparisonGroup
+                            key={run.id}
+                            run={run}
+                            threads={threads}
+                            output={run.merges?.at(-1)}
+                          >
+                            {run.entries.map((entry, index) => (
+                              <li key={index} className="px-2 py-2 text-xs text-muted-foreground">
+                                {entry.instanceId} ·{" "}
+                                {entry.launch === "failed" ? "Failed to start" : "Starting"}
+                              </li>
+                            ))}
+                          </ComparisonGroup>,
+                        );
+                      }
                       for (const item of sidebarListItems) {
                         if (item.kind === "thread") {
                           const group = groupByThread.get(item.key);

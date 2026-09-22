@@ -820,7 +820,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       <div
         className={cn(
           "relative flex h-screen w-screen flex-row overflow-hidden",
-          props.comparison ? "max-h-110 w-[min(27.5rem,calc(100vw-2rem))]" : "max-h-86.5 max-w-90",
+          props.comparison
+            ? "h-[min(40rem,var(--available-height,calc(100dvh-6rem)))] max-h-[calc(100dvh-6rem)] w-[min(35rem,calc(100vw-2rem))]"
+            : "max-h-86.5 max-w-90",
         )}
         data-model-picker-content="true"
       >
@@ -969,7 +971,12 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
             </div>
 
             {/* Model list */}
-            <div className="relative min-h-0 flex-1 overflow-hidden pr-px">
+            <div
+              className={cn(
+                "relative min-h-0 flex-1 overflow-hidden pr-px",
+                props.comparison && "min-h-24",
+              )}
+            >
               <ComboboxListVirtualized className="size-full min-w-0 p-0 not-empty:p-0">
                 <LegendList<string>
                   ref={modelListRef}
@@ -1082,11 +1089,12 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                 No models found
               </ComboboxEmpty>
             )}
+            {props.comparison?.mergerSettings}
             {props.comparison ? (
               <div
                 aria-label="Comparison configuration"
                 aria-live="polite"
-                className="max-h-36 shrink-0 overflow-y-auto border-t border-border/70 px-3 py-2 text-xs text-muted-foreground"
+                className="shrink-0 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground"
               >
                 {props.comparison.summarySelections.map((selection) => (
                   <p key={selection.instanceId} className="break-words py-0.5">
@@ -1096,6 +1104,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                     {comparisonSelectionSummary(selection)}
                   </p>
                 ))}
+                {props.comparison.mergerSummary}
               </div>
             ) : null}
           </div>

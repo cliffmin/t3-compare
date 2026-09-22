@@ -1,3 +1,5 @@
+import { withComparisonDefaults } from "../compareProviders";
+import { useComparisonMergePreferences } from "../comparisonMergePreferences";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import type { UsageLimitSourceSnapshots } from "@t3tools/contracts";
@@ -7928,6 +7930,12 @@ export default function ChatView(props: ChatViewProps) {
       }),
     );
     if (multipleModelSelections !== null) {
+      const mergePreferences = useComparisonMergePreferences.getState();
+      const merger = mergePreferences.selections[environmentId];
+      const mergeDraftKey = `${environmentId}:${draftId ?? ""}`;
+      const mergeDirection = mergePreferences.directions[mergeDraftKey] ?? "";
+      const runId = newCompareRunId();
+      const originalThreadIds = multipleTargets.map(() => newThreadId());
       const failedSelections: ModelSelection[] = [];
       // One slot per selected provider, indexed by its position in the
       // picker rather than by the order requests happen to settle, so the
@@ -7942,6 +7950,19 @@ export default function ChatView(props: ChatViewProps) {
       let canRestoreDraft = () => false;
       let startedCount = 0;
       try {
+        const mergerProvider = providerInstanceEntries.find(
+          (entry) => entry.instanceId === merger?.instanceId,
+        );
+        if (
+          !merger ||
+          !mergerProvider?.enabled ||
+          !mergerProvider.isAvailable ||
+          mergerProvider.status !== "ready" ||
+          !mergerProvider.models.some((model) => model.slug === merger.model)
+        )
+          throw new Error(
+            "Choose an available merger and model in comparison settings before sending.",
+          );
         const attachments = await turnAttachmentsPromise;
         const fileBlockReason = readLiveAttachmentCapabilities().fileBlockReason;
         if (fileBlockReason !== null) throw new Error(fileBlockReason);
@@ -7972,6 +7993,37 @@ export default function ChatView(props: ChatViewProps) {
             clearedDraftSnapshot &&
           multipleModelSelectionsRef.current === submittedSelections;
         setThreadError(threadIdForSend, null);
+        useCompareRunStore.getState().recordRun({
+          id: runId,
+          createdAt: messageCreatedAt,
+          environmentId,
+          projectId: activeProject.id,
+          prompt: messageTextForSend,
+          automatic: {
+            config: {
+              modelSelection: withComparisonDefaults(
+                mergerProvider,
+                merger,
+                settings.planModeEnabled,
+              ),
+              direction: mergeDirection,
+            },
+            status: "waiting",
+          },
+          entries: multipleTargets.map((target, index) => ({
+            threadId: originalThreadIds[index]!,
+            instanceId: target.selection.instanceId,
+            label:
+              providerInstanceEntries.find(
+                (entry) => entry.instanceId === target.selection.instanceId,
+              )?.displayName ?? target.selection.instanceId,
+            model: target.selection.model,
+            ...(target.selection.options ? { options: target.selection.options } : {}),
+            launch: "pending",
+          })),
+        });
+        mergePreferences.direct(mergeDraftKey, "");
+        void navigate({ to: "/compare/$runId", params: { runId } });
         const starts = Promise.all(
           multipleTargets.map(async (target, targetIndex) => {
             const retryKey = JSON.stringify([
@@ -7980,7 +8032,7 @@ export default function ChatView(props: ChatViewProps) {
               target.selection.model,
             ]);
             const uncertainThreadId = uncertainMultipleSubmissionsRef.current.get(retryKey);
-            const targetThreadId = uncertainThreadId ?? newThreadId();
+            const targetThreadId = uncertainThreadId ?? originalThreadIds[targetIndex]!;
             let requestMayHaveStarted = false;
             try {
               if (uncertainThreadId) {
@@ -8045,6 +8097,7 @@ export default function ChatView(props: ChatViewProps) {
               }
               startedCount += 1;
               attemptedEntries[targetIndex] = {
+                launch: "started",
                 threadId: targetThreadId,
                 instanceId: target.selection.instanceId,
                 model: target.selection.model,
@@ -8052,7 +8105,8 @@ export default function ChatView(props: ChatViewProps) {
               };
             } catch (error) {
               attemptedEntries[targetIndex] = {
-                threadId: null,
+                launch: requestMayHaveStarted ? "uncertain" : "failed",
+                threadId: requestMayHaveStarted ? targetThreadId : null,
                 instanceId: target.selection.instanceId,
                 model: target.selection.model,
                 ...(target.selection.options ? { options: target.selection.options } : {}),
@@ -8111,6 +8165,23 @@ export default function ChatView(props: ChatViewProps) {
                     : {}),
                 }),
               );
+            } finally {
+              const entry = attemptedEntries[targetIndex];
+              if (entry)
+                useCompareRunStore
+                  .getState()
+                  .updateRun(runId, (current) => ({
+                    ...current,
+                    entries: current.entries.map((existing, index) =>
+                      index === targetIndex
+                        ? {
+                            ...entry,
+                            ...(existing.label ? { label: existing.label } : {}),
+                            ...(existing.original ? { original: existing.original } : {}),
+                          }
+                        : existing,
+                    ),
+                  }));
             }
           }),
         );
@@ -8120,31 +8191,6 @@ export default function ChatView(props: ChatViewProps) {
         resetLocalDispatch();
         releasedComposer = true;
         await starts;
-        const recordedEntries = attemptedEntries.filter(
-          (candidate): candidate is CompareRunEntry => candidate !== null,
-        );
-        if (startedCount > 0 && recordedEntries.length > 1) {
-          // The grid opens whenever more than one provider was asked and at
-          // least one is answering; providers that failed to start show as
-          // their own columns. When nothing started there is no comparison
-          // to show, so the draft is restored below and keeps its toast.
-          const runId = newCompareRunId();
-          useCompareRunStore.getState().recordRun({
-            id: runId,
-            createdAt: new Date().toISOString(),
-            environmentId,
-            prompt: messageTextForSend,
-            entries: recordedEntries,
-          });
-          void navigate({ to: "/compare/$runId", params: { runId } });
-        } else if (startedCount > 0) {
-          toastManager.add(
-            stackedThreadToast({
-              type: "success",
-              title: `Started ${startedCount} ${startedCount === 1 ? "thread" : "threads"} in background`,
-            }),
-          );
-        }
         if (failedSelections.length === 0 && turnUsesAttachmentUploads) {
           releaseDraftAttachments(composerAttachmentsSnapshot);
         }

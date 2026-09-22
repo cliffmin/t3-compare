@@ -11,6 +11,7 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 import { deriveProviderInstanceEntries } from "./providerInstances";
 import {
+  withComparisonDefaults,
   selectComparisonModels,
   updateComparisonSelection,
   comparisonSelectionSummary,
@@ -149,4 +150,48 @@ describe("comparison configuration dispatch", () => {
     expect(comparisonSelectionSummary(run.entries[0]!)).toContain("fast Mode: false");
     useCompareRunStore.getState().removeRun(run.id);
   });
+});
+
+it("snapshots supported default merger options and preserves explicit effort", () => {
+  const entry = deriveProviderInstanceEntries([
+    provider("merger", {
+      models: [
+        {
+          slug: "model",
+          name: "Model",
+          isCustom: false,
+          capabilities: {
+            optionDescriptors: [
+              {
+                type: "select",
+                id: "reasoningEffort",
+                label: "Effort",
+                options: [
+                  { id: "medium", label: "Medium", isDefault: true },
+                  { id: "high", label: "High" },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    }),
+  ])[0]!;
+  expect(
+    withComparisonDefaults(entry, createModelSelection(entry.instanceId, "model"), true).options,
+  ).toEqual([{ id: "reasoningEffort", value: "medium" }]);
+  expect(
+    withComparisonDefaults(
+      entry,
+      createModelSelection(entry.instanceId, "model", [{ id: "reasoningEffort", value: "high" }]),
+      true,
+    ).options,
+  ).toEqual([{ id: "reasoningEffort", value: "high" }]);
+  expect(
+    withComparisonDefaults(
+      { ...entry, models: [] },
+      createModelSelection(entry.instanceId, "model", [{ id: "reasoningEffort", value: "high" }]),
+      true,
+    ).options ?? [],
+  ).toEqual([]);
 });

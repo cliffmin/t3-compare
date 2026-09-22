@@ -90,34 +90,36 @@ export function CompareView({
           Comparing {run.entries.length} providers
         </p>
         <p className="line-clamp-2 text-sm text-foreground">{run.prompt}</p>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant={tab === "originals" ? "secondary" : "ghost"}
-            aria-pressed={tab === "originals"}
-            onClick={() => setTab("originals")}
-          >
-            Compare
-          </Button>
-          <Button
-            size="sm"
-            variant={tab === "merged" ? "secondary" : "ghost"}
-            aria-pressed={tab === "merged"}
-            onClick={() => setTab("merged")}
-          >
-            Merged
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setTab("merged");
-              setSetupOpen(true);
-            }}
-          >
-            Merge best answer
-          </Button>
-        </div>
+        {!run.automatic ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant={tab === "originals" ? "secondary" : "ghost"}
+              aria-pressed={tab === "originals"}
+              onClick={() => setTab("originals")}
+            >
+              Compare
+            </Button>
+            <Button
+              size="sm"
+              variant={tab === "merged" ? "secondary" : "ghost"}
+              aria-pressed={tab === "merged"}
+              onClick={() => setTab("merged")}
+            >
+              Merged
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setTab("merged");
+                setSetupOpen(true);
+              }}
+            >
+              Merge best answer
+            </Button>
+          </div>
+        ) : null}
       </header>
 
       {/*
@@ -149,6 +151,7 @@ export function CompareView({
               sourceIndex={index}
               onSource={onSource}
               included={included[entry.threadId] !== false}
+              inputsFrozen={Boolean(run.automatic && run.automatic.status !== "waiting")}
               onIncludeChange={(value) => {
                 setIncluded((current) => ({ ...current, [entry.threadId!]: value }));
                 const store = useCompareRunStore.getState();
@@ -265,6 +268,7 @@ function CompareThreadColumn({
   onSource,
   included,
   onIncludeChange,
+  inputsFrozen,
   threadId,
   environmentId,
   providerEntry,
@@ -273,6 +277,7 @@ function CompareThreadColumn({
   readonly sourceIndex: number;
   readonly onSource: (threadId: ThreadId, source: CompareSourceState | null) => void;
   readonly included: boolean;
+  readonly inputsFrozen: boolean;
   readonly onIncludeChange: (included: boolean) => void;
   readonly threadId: ThreadId;
   readonly environmentId: EnvironmentId;
@@ -285,13 +290,15 @@ function CompareThreadColumn({
   const original = thread ? originalComparisonTurn(thread) : null;
   const status =
     entry.original?.status ??
-    (original?.state === "unverified"
+    (entry.launch === "uncertain" && !original?.state
       ? "unverified"
-      : resolveCompareColumnStatus({
-          subscriptionStatus: threadState.status,
-          latestTurnState: original?.state ?? null,
-          sessionStatus: thread?.session?.status ?? null,
-        }));
+      : original?.state === "unverified"
+        ? "unverified"
+        : resolveCompareColumnStatus({
+            subscriptionStatus: threadState.status,
+            latestTurnState: original?.state ?? null,
+            sessionStatus: thread?.session?.status ?? null,
+          }));
   const answers = entry.original?.messages ?? original?.messages ?? [];
   const pending = isCompareColumnPending({ status, answerCount: answers.length });
   const completedAnswer =
@@ -343,10 +350,10 @@ function CompareThreadColumn({
             type="checkbox"
             className="accent-primary"
             checked={included && status === "completed" && answers.length > 0}
-            disabled={status !== "completed" || answers.length === 0}
+            disabled={inputsFrozen || status !== "completed" || answers.length === 0}
             onChange={(event) => onIncludeChange(event.target.checked)}
           />
-          Include in merge
+          {inputsFrozen ? "Merge selection locked" : "Include in merge"}
           {status === "running" || status === "loading"
             ? " · Waiting for completion"
             : status !== "completed"
@@ -373,7 +380,12 @@ function CompareThreadColumn({
         </>
       }
     >
-      {pending ? (
+      {entry.launch === "uncertain" && !original?.state ? (
+        <p className="text-sm text-muted-foreground">
+          Request delivery is unknown. Open this thread to check; it will not be sent again
+          automatically.
+        </p>
+      ) : pending ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner className="size-4" />
           <span>Waiting for the first response…</span>

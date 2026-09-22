@@ -9,7 +9,9 @@ export function comparisonSidebarGroups(
 ) {
   const rows = items.filter((item) => item.kind === "thread");
   const groups = runs.flatMap((run) => {
-    const outputs = (run.merges ?? []).filter((merge) => merge.output !== undefined);
+    const outputs = (run.merges ?? []).filter(
+      (merge) => run.automatic || merge.output !== undefined,
+    );
     const keys = new Set(
       [
         ...run.entries.map((entry) => entry.threadId),

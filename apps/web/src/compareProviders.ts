@@ -1,4 +1,9 @@
-import type { ModelSelection, ProviderInstanceId } from "@t3tools/contracts";
+import { getProviderModelCapabilities } from "./providerModels";
+import type {
+  ModelSelection,
+  ProviderInstanceId,
+  ProviderOptionSelection,
+} from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 
 import { isProviderInstancePickerReady, type ProviderInstanceEntry } from "./providerInstances";
@@ -37,4 +42,30 @@ export function comparisonSelectionSummary(selection: ModelSelection): string {
       (option) => `${option.id.replace(/([a-z])([A-Z])/g, "$1 $2")}: ${String(option.value)}`,
     ) ?? [];
   return [selection.model, ...(options.length > 0 ? options : ["Default options"])].join(" · ");
+}
+
+/** Freeze the advertised defaults as well as explicit choices so later catalog changes cannot alter a run. */
+export function withComparisonDefaults(
+  entry: ProviderInstanceEntry,
+  selection: ModelSelection,
+  planModeEnabled: boolean,
+): ModelSelection {
+  const descriptors =
+    getProviderModelCapabilities(entry.models, selection.model, entry.driverKind, planModeEnabled)
+      .optionDescriptors ?? [];
+  const options: ProviderOptionSelection[] = descriptors.flatMap(
+    (descriptor): ProviderOptionSelection[] => {
+      const chosen = selection.options?.find((option) => option.id === descriptor.id)?.value;
+      const value =
+        descriptor.type === "select"
+          ? typeof chosen === "string" && descriptor.options.some((option) => option.id === chosen)
+            ? chosen
+            : (descriptor.currentValue ?? descriptor.options.find((option) => option.isDefault)?.id)
+          : typeof chosen === "boolean"
+            ? chosen
+            : descriptor.currentValue;
+      return value === undefined ? [] : [{ id: descriptor.id, value }];
+    },
+  );
+  return createModelSelection(selection.instanceId, selection.model, options);
 }

@@ -1840,99 +1840,114 @@ const make = Effect.gen(function* () {
           ? yield* getSourceProposedPlanReferenceForAcceptedTurnStart(thread.id, eventTurnId)
           : null;
 
-      if (
-        event.type === "session.started" ||
-        event.type === "session.state.changed" ||
-        event.type === "session.exited" ||
-        event.type === "thread.started" ||
-        event.type === "turn.started" ||
-        isTerminalTurn
-      ) {
-        const status = (() => {
-          switch (event.type) {
-            case "session.state.changed": {
-              const runtimeStatus = orchestrationSessionStatusFromRuntimeState(event.payload.state);
-              return hasPendingTurnStart && runtimeStatus === "ready" ? "starting" : runtimeStatus;
+      const updateThreadLifecycle = Effect.gen(function* () {
+        if (
+          event.type === "session.started" ||
+          event.type === "session.state.changed" ||
+          event.type === "session.exited" ||
+          event.type === "thread.started" ||
+          event.type === "turn.started" ||
+          isTerminalTurn
+        ) {
+          const status = (() => {
+            switch (event.type) {
+              case "session.state.changed": {
+                const runtimeStatus = orchestrationSessionStatusFromRuntimeState(
+                  event.payload.state,
+                );
+                return hasPendingTurnStart && runtimeStatus === "ready"
+                  ? "starting"
+                  : runtimeStatus;
+              }
+              case "turn.started":
+                return "running";
+              case "session.exited":
+                return "stopped";
+              case "turn.aborted":
+                return "interrupted";
+              case "turn.completed": {
+                const state = normalizeRuntimeTurnState(event.payload.state);
+                return state === "failed"
+                  ? "error"
+                  : state === "interrupted" || state === "cancelled"
+                    ? "interrupted"
+                    : "ready";
+              }
+              case "session.started":
+              case "thread.started":
+                // Provider thread/session start notifications can arrive during an
+                // active or pending turn; preserve that lifecycle state.
+                return activeTurnId !== null
+                  ? "running"
+                  : hasPendingTurnStart
+                    ? "starting"
+                    : "ready";
             }
-            case "turn.started":
-              return "running";
-            case "session.exited":
-              return "stopped";
-            case "turn.aborted":
-              return "interrupted";
-            case "turn.completed":
-              return normalizeRuntimeTurnState(event.payload.state) === "failed"
-                ? "error"
-                : "ready";
-            case "session.started":
-            case "thread.started":
-              // Provider thread/session start notifications can arrive during an
-              // active or pending turn; preserve that lifecycle state.
-              return activeTurnId !== null ? "running" : hasPendingTurnStart ? "starting" : "ready";
-          }
-        })();
-        const nextActiveTurnId =
-          event.type === "turn.started"
-            ? (eventTurnId ?? null)
-            : isTerminalTurn || event.type === "session.exited"
-              ? null
-              : event.type === "session.state.changed" &&
-                  !sessionStatusAllowsActiveTurn(
-                    orchestrationSessionStatusFromRuntimeState(event.payload.state),
-                  )
+          })();
+          const nextActiveTurnId =
+            event.type === "turn.started"
+              ? (eventTurnId ?? null)
+              : isTerminalTurn || event.type === "session.exited"
                 ? null
-                : activeTurnId;
-        const lastError =
-          event.type === "session.state.changed" && event.payload.state === "error"
-            ? (event.payload.reason ?? thread.session?.lastError ?? "Provider session error")
-            : event.type === "turn.completed" &&
-                normalizeRuntimeTurnState(event.payload.state) === "failed"
-              ? (event.payload.errorMessage ?? thread.session?.lastError ?? "Turn failed")
-              : status === "ready" || status === "interrupted"
-                ? null
-                : (thread.session?.lastError ?? null);
+                : event.type === "session.state.changed" &&
+                    !sessionStatusAllowsActiveTurn(
+                      orchestrationSessionStatusFromRuntimeState(event.payload.state),
+                    )
+                  ? null
+                  : activeTurnId;
+          const lastError =
+            event.type === "session.state.changed" && event.payload.state === "error"
+              ? (event.payload.reason ?? thread.session?.lastError ?? "Provider session error")
+              : event.type === "turn.completed" &&
+                  normalizeRuntimeTurnState(event.payload.state) === "failed"
+                ? (event.payload.errorMessage ?? thread.session?.lastError ?? "Turn failed")
+                : status === "ready" || status === "interrupted"
+                  ? null
+                  : (thread.session?.lastError ?? null);
 
-        if (shouldApplyThreadLifecycle) {
-          if (event.type === "turn.started" && acceptedTurnStartedSourcePlan !== null) {
-            yield* markSourceProposedPlanImplemented(
-              acceptedTurnStartedSourcePlan.sourceThreadId,
-              acceptedTurnStartedSourcePlan.sourcePlanId,
-              thread.id,
-              now,
-            ).pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning(
-                  "provider runtime ingestion failed to mark source proposed plan",
-                  {
-                    eventId: event.eventId,
-                    eventType: event.type,
-                    cause: Cause.pretty(cause),
-                  },
+          if (shouldApplyThreadLifecycle) {
+            if (event.type === "turn.started" && acceptedTurnStartedSourcePlan !== null) {
+              yield* markSourceProposedPlanImplemented(
+                acceptedTurnStartedSourcePlan.sourceThreadId,
+                acceptedTurnStartedSourcePlan.sourcePlanId,
+                thread.id,
+                now,
+              ).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning(
+                    "provider runtime ingestion failed to mark source proposed plan",
+                    {
+                      eventId: event.eventId,
+                      eventType: event.type,
+                      cause: Cause.pretty(cause),
+                    },
+                  ),
                 ),
-              ),
-            );
-          }
+              );
+            }
 
-          yield* orchestrationEngine.dispatch({
-            type: "thread.session.set",
-            commandId: yield* providerCommandId(event, "thread-session-set"),
-            threadId: thread.id,
-            session: {
+            yield* orchestrationEngine.dispatch({
+              type: "thread.session.set",
+              commandId: yield* providerCommandId(event, "thread-session-set"),
               threadId: thread.id,
-              status,
-              providerName: event.provider,
-              ...(event.providerInstanceId !== undefined
-                ? { providerInstanceId: event.providerInstanceId }
-                : {}),
-              runtimeMode: thread.session?.runtimeMode ?? "full-access",
-              activeTurnId: nextActiveTurnId,
-              lastError,
-              updatedAt: now,
-            },
-            createdAt: now,
-          });
+              session: {
+                threadId: thread.id,
+                status,
+                providerName: event.provider,
+                ...(event.providerInstanceId !== undefined
+                  ? { providerInstanceId: event.providerInstanceId }
+                  : {}),
+                runtimeMode: thread.session?.runtimeMode ?? "full-access",
+                activeTurnId: nextActiveTurnId,
+                lastError,
+                updatedAt: now,
+              },
+              createdAt: now,
+            });
+          }
         }
-      }
+      });
+      if (!isTerminalTurn) yield* updateThreadLifecycle;
 
       const assistantDelta =
         event.type === "content.delta" && event.payload.streamKind === "assistant_text"
@@ -2400,6 +2415,10 @@ const make = Effect.gen(function* () {
           });
         }
       }
+
+      // Terminal state is the client-visible snapshot boundary. Publish it only
+      // after buffered final text is durable, including interrupted partial text.
+      if (isTerminalTurn) yield* updateThreadLifecycle;
 
       if (event.type === "session.exited") {
         yield* clearTurnStateForSession(thread.id);

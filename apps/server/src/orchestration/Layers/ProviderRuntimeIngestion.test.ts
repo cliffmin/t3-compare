@@ -482,6 +482,71 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.lastError).toBe("turn failed");
   });
 
+  it.each(["completed", "interrupted", "cancelled", "failed"] as const)(
+    "publishes %s only after buffered final text is durable",
+    async (state) => {
+      const harness = await createHarness({
+        serverSettings: { responseStreamingMode: "paragraph" },
+      });
+      const turnId = asTurnId("terminal-buffer-order");
+      const base = {
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        turnId,
+        createdAt: "2026-01-01T00:00:01.000Z",
+      };
+      await harness.emitAndDrain([
+        { ...base, type: "turn.started", eventId: asEventId("buffer-start") },
+        {
+          ...base,
+          type: "content.delta",
+          eventId: asEventId("buffer-text"),
+          itemId: asItemId("buffer-item"),
+          payload: { streamKind: "assistant_text", delta: "Final text without paragraph break" },
+        },
+        {
+          ...base,
+          type: "turn.completed",
+          eventId: asEventId("buffer-end"),
+          payload: { state },
+        },
+      ]);
+      const expectedStatus =
+        state === "completed" ? "ready" : state === "failed" ? "error" : "interrupted";
+      const events = await Effect.runPromise(
+        Stream.runCollect(harness.engine.readEvents(0)).pipe(
+          Effect.map((chunk) => Array.from(chunk)),
+        ),
+      );
+      const completionIndex = events.findIndex(
+        (event) =>
+          event.type === "thread.message-sent" &&
+          event.payload.role === "assistant" &&
+          event.payload.turnId === turnId &&
+          !event.payload.streaming,
+      );
+      const terminalIndex = events.findIndex(
+        (event) =>
+          event.type === "thread.session-set" &&
+          event.payload.session.status === expectedStatus &&
+          event.payload.session.updatedAt === base.createdAt,
+      );
+      expect(completionIndex).toBeGreaterThanOrEqual(0);
+      expect(terminalIndex).toBeGreaterThan(completionIndex);
+      const thread = (await harness.readModel()).threads[0]!;
+      expect(thread.messages).toEqual([
+        expect.objectContaining({
+          text: "Final text without paragraph break",
+          streaming: false,
+        }),
+      ]);
+      const expectedState =
+        state === "completed" ? "completed" : state === "failed" ? "error" : "interrupted";
+      expect(thread.latestTurn?.state).toBe(expectedState);
+      expect((await harness.readTurn(turnId))?.state).toBe(expectedState);
+    },
+  );
+
   it.each([
     { delivery: "buffered", responseStreamingMode: "paragraph" as const },
     { delivery: "streamed", responseStreamingMode: "token" as const },
