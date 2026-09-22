@@ -132,7 +132,7 @@ Runtime-discovered entrypoints and dependency exceptions belong in [knip.jsonc](
 
 ## Desktop artifacts
 
-Local artifact builds are unsigned by default and write to `release/`:
+Local artifact builds write to `release/` and use ad-hoc signing on macOS by default:
 
 ```sh
 vp run dist:desktop:dmg
@@ -194,6 +194,48 @@ rustup target add aarch64-pc-windows-msvc
 NSIS is downloaded by electron-builder. WSL support additionally needs the Linux CLI archive
 passed as `--wsl-runtime`; see the
 [release runbook](./release.md#windows-payload-topology-and-update-validation).
+
+### Persistent local macOS signing
+
+Ad-hoc app signatures change identity with each build and can cause repeated Safe Storage
+Keychain prompts after updates. For this Mac's local T3 Compare packages, reuse one dedicated
+certificate and private key. This does not provide Developer ID distribution, notarization,
+or provisioned passkeys.
+
+Create the identity once using Keychain Access → Certificate Assistant → Create a Certificate:
+choose a dedicated name, Self Signed Root, Code Signing, and the login keychain. Override defaults
+for a long validity period (for example 3650 days), RSA 2048 bits or stronger, Digital Signature
+and Code Signing usage only. Keep the key private and outside Git. If `security find-identity -v
+-p codesigning` reports no valid identity, inspect the matching private key, expiry and policy.
+A self-signed certificate may require the owner to approve **Code Signing only** trust for that
+certificate in the user domain. This trust covers any code signed by that key, not just this app.
+Do not enable blanket trust, other trust policies, system-wide trust, or all-app private-key access.
+The packaging script never changes Keychain or trust settings.
+
+Read the certificate's SHA-1 fingerprint from `security find-identity -v -p codesigning`, then run:
+
+```sh
+vp run dist:desktop:artifact --platform mac --target zip --arch arm64 \
+  --local-signing-identity YOUR_40_CHARACTER_CERTIFICATE_SHA1 \
+  --build-version 0.0.42-compare.12
+```
+
+`T3CODE_DESKTOP_LOCAL_SIGNING_IDENTITY` is the environment equivalent. CLI takes precedence.
+Local signing is macOS-only (zip, dmg or dir), cannot be combined with `--signed`, disables
+notarization/timestamp services and imported distribution credentials, and fails if the exact
+identity is unavailable. It never falls back to ad-hoc signing or another certificate.
+
+Keep using this exact certificate/private key for future packages; recreating its name changes
+the identity. Record its expiry and preserve a secure private-key backup outside the repository
+if recovery is needed. Loss, replacement, or expiry requires revisiting the signing setup;
+a replacement may require another Keychain approval. The transition from an ad-hoc install
+may also require one owner-approved Safe Storage prompt. Do not delete Safe Storage items or
+change encryption to suppress it.
+
+Before replacing an installed app, verify two changed builds with `codesign --verify --deep
+--strict`, compare `codesign -d -r-` and signer fingerprints, and confirm their code hashes differ.
+Preserve the previous app and an offline data backup. Stable signatures support continuity;
+only an observed launch after the next signed update proves recurring prompts have stopped.
 
 ### Signing and passkeys
 

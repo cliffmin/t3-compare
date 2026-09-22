@@ -28,6 +28,10 @@ import {
   resolveWebAssetBrandForChannel,
   type WebAssetBrand,
 } from "./lib/brand-assets.ts";
+import {
+  normalizeLocalSigningIdentity,
+  verifyLocalSigningIdentity,
+} from "./lib/local-macos-signing.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import {
   findInlinedExternalPackages,
@@ -158,6 +162,7 @@ interface BuildCliInput {
   readonly skipBuild: Option.Option<boolean>;
   readonly keepStage: Option.Option<boolean>;
   readonly signed: Option.Option<boolean>;
+  readonly localSigningIdentity: Option.Option<string>;
   readonly verbose: Option.Option<boolean>;
   readonly mockUpdates: Option.Option<boolean>;
   readonly mockUpdateServerPort: Option.Option<number>;
@@ -915,6 +920,7 @@ interface ResolvedBuildOptions {
   readonly skipBuild: boolean;
   readonly keepStage: boolean;
   readonly signed: boolean;
+  readonly localSigningIdentity: string | undefined;
   readonly verbose: boolean;
   readonly mockUpdates: boolean;
   readonly mockUpdateServerPort: number | undefined;
@@ -1537,6 +1543,14 @@ const AzureTrustedSigningOptionsConfig = Config.all({
   ),
 });
 
+export class LocalMacSigningError extends Schema.TaggedError<LocalMacSigningError>()(
+  "LocalMacSigningError",
+  { message: Schema.String },
+) {}
+
+const localSigningError = (cause: unknown) =>
+  new LocalMacSigningError({ message: cause instanceof Error ? cause.message : String(cause) });
+
 const BuildEnvConfig = Config.all({
   platform: Config.schema(BuildPlatform, "T3CODE_DESKTOP_PLATFORM").pipe(Config.option),
   target: Config.String("T3CODE_DESKTOP_TARGET").pipe(Config.option),
@@ -1546,6 +1560,7 @@ const BuildEnvConfig = Config.all({
   skipBuild: Config.Boolean("T3CODE_DESKTOP_SKIP_BUILD").pipe(Config.withDefault(false)),
   keepStage: Config.Boolean("T3CODE_DESKTOP_KEEP_STAGE").pipe(Config.withDefault(false)),
   signed: Config.Boolean("T3CODE_DESKTOP_SIGNED").pipe(Config.withDefault(false)),
+  localSigningIdentity: Config.String("T3CODE_DESKTOP_LOCAL_SIGNING_IDENTITY").pipe(Config.option),
   verbose: Config.Boolean("T3CODE_DESKTOP_VERBOSE").pipe(Config.withDefault(false)),
   mockUpdates: Config.Boolean("T3CODE_DESKTOP_MOCK_UPDATES").pipe(Config.withDefault(false)),
   mockUpdateServerPort: Config.String("T3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT").pipe(Config.option),
@@ -1630,6 +1645,32 @@ export const resolveBuildOptions = Effect.fn("resolveBuildOptions")(function* (
   const skipBuild = resolveBooleanFlag(input.skipBuild, env.skipBuild);
   const keepStage = resolveBooleanFlag(input.keepStage, env.keepStage);
   const signed = resolveBooleanFlag(input.signed, env.signed);
+  const configuredLocalIdentity = mergeOptions(
+    input.localSigningIdentity,
+    env.localSigningIdentity,
+    undefined,
+  );
+  const localSigningIdentity =
+    configuredLocalIdentity === undefined
+      ? undefined
+      : yield* Effect.try({
+          try: () => normalizeLocalSigningIdentity(configuredLocalIdentity),
+          catch: localSigningError,
+        });
+  if (
+    localSigningIdentity !== undefined &&
+    (platform !== "mac" || hostPlatform !== "darwin" || signed)
+  ) {
+    return yield* new LocalMacSigningError({
+      message:
+        "Local signing requires a macOS host/target and cannot be combined with --signed or T3CODE_DESKTOP_SIGNED=true.",
+    });
+  }
+  if (localSigningIdentity !== undefined && !["zip", "dmg", "dir"].includes(target)) {
+    return yield* new LocalMacSigningError({
+      message: "Local signing supports macOS zip, dmg, or dir targets only.",
+    });
+  }
   const verbose = resolveBooleanFlag(input.verbose, env.verbose);
 
   const mockUpdates = resolveBooleanFlag(input.mockUpdates, env.mockUpdates);
@@ -1656,6 +1697,7 @@ export const resolveBuildOptions = Effect.fn("resolveBuildOptions")(function* (
     skipBuild,
     keepStage,
     signed,
+    localSigningIdentity,
     verbose,
     mockUpdates,
     mockUpdateServerPort,
@@ -2634,8 +2676,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   // source file was never written fails the electron-builder step.
   wslRuntimeBundled = false,
   arch?: typeof BuildArch.Type,
+  localSigningIdentity?: string,
 ) {
   const buildConfig: Record<string, unknown> = {
+    ...(localSigningIdentity ? { forceCodeSigning: true } : {}),
     appId: DESKTOP_APP_ID,
     productName: resolveDesktopProductName(version),
     artifactName: "T3-Compare-${version}-${arch}.${ext}",
@@ -2675,7 +2719,11 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
-      ...(!signed ? { identity: "-" } : {}),
+      ...(localSigningIdentity
+        ? { identity: localSigningIdentity, notarize: false, timestamp: "none" }
+        : !signed
+          ? { identity: "-" }
+          : {}),
       category: "public.app-category.developer-tools",
       extendInfo: {
         NSScreenCaptureUsageDescription:
@@ -2687,7 +2735,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
           schemes: ["t3compare"],
         },
       ],
-      ...(signed ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") } : {}),
+      ...(signed || localSigningIdentity
+        ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") }
+        : {}),
       ...(macPasskeySigning
         ? {
             entitlements: macPasskeySigning.entitlementsPath,
@@ -3307,6 +3357,45 @@ export const validateWindowsPackagedPayload = Effect.fn(
   return { packagedAppDir, fileCount, unpackedFiles } as const;
 });
 
+/** Keep local signing independent of ambient distribution/import credentials. */
+export function createDesktopSigningEnvironment(
+  hostEnv: NodeJS.ProcessEnv,
+  signed: boolean,
+  localSigningIdentity?: string,
+): NodeJS.ProcessEnv {
+  // electron-builder treats some empty variables as enabled.
+  const buildEnv = Object.fromEntries(Object.entries(hostEnv).filter(([, value]) => value !== ""));
+  if (!signed) {
+    buildEnv.CSC_IDENTITY_AUTO_DISCOVERY = "false";
+    for (const key of [
+      "CSC_LINK",
+      "CSC_KEY_PASSWORD",
+      "APPLE_API_KEY",
+      "APPLE_API_KEY_ID",
+      "APPLE_API_ISSUER",
+    ])
+      delete buildEnv[key];
+  }
+  // Pass only the resolved CLI/config value to the hook, never a shadowing ambient value.
+  delete buildEnv.T3CODE_DESKTOP_LOCAL_SIGNING_IDENTITY;
+  if (localSigningIdentity) {
+    for (const key of [
+      "CSC_NAME",
+      "CSC_KEYCHAIN",
+      "CSC_INSTALLER_LINK",
+      "CSC_INSTALLER_KEY_PASSWORD",
+      "APPLE_ID",
+      "APPLE_APP_SPECIFIC_PASSWORD",
+      "APPLE_TEAM_ID",
+      "APPLE_KEYCHAIN",
+      "APPLE_KEYCHAIN_PROFILE",
+    ])
+      delete buildEnv[key];
+    buildEnv.T3CODE_DESKTOP_LOCAL_SIGNING_IDENTITY = localSigningIdentity;
+  }
+  return buildEnv;
+}
+
 const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   options: ResolvedBuildOptions,
 ) {
@@ -3327,6 +3416,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         platform: options.platform,
         runtimeArchivePath: options.wslRuntime,
       }),
+    });
+  }
+  const localSigningIdentity = options.localSigningIdentity;
+  if (localSigningIdentity) {
+    yield* Effect.tryPromise({
+      try: () => verifyLocalSigningIdentity(localSigningIdentity),
+      catch: localSigningError,
     });
   }
   const workspaceConfig = yield* readWorkspaceConfig();
@@ -3647,6 +3743,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         : undefined,
       bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime }),
       options.arch,
+      options.localSigningIdentity,
     ),
     dependencies: stageDependencies,
     devDependencies: {
@@ -3714,26 +3811,12 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     });
   }
 
-  // electron-builder treats several set-but-empty variables (e.g. CSC_LINK="")
-  // as enabled, so copy the host env and scrub empty values instead of relying
-  // on `extendEnv` merging.
-  const buildEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-  };
+  const buildEnv = createDesktopSigningEnvironment(
+    process.env,
+    options.signed,
+    options.localSigningIdentity,
+  );
   buildEnv.npm_config_user_agent = resolvePackageManagerUserAgent(rootPackageJson.packageManager);
-  for (const [key, value] of Object.entries(buildEnv)) {
-    if (value === "") {
-      delete buildEnv[key];
-    }
-  }
-  if (!options.signed) {
-    buildEnv.CSC_IDENTITY_AUTO_DISCOVERY = "false";
-    delete buildEnv.CSC_LINK;
-    delete buildEnv.CSC_KEY_PASSWORD;
-    delete buildEnv.APPLE_API_KEY;
-    delete buildEnv.APPLE_API_KEY_ID;
-    delete buildEnv.APPLE_API_ISSUER;
-  }
 
   if (hostPlatform === "win32") {
     const python = yield* resolvePythonForNodeGyp();
@@ -3880,6 +3963,12 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
   signed: Flag.Boolean("signed").pipe(
     Flag.withDescription(
       "Enable signing/notarization discovery; Windows uses Azure Trusted Signing (env: T3CODE_DESKTOP_SIGNED).",
+    ),
+    Flag.optional,
+  ),
+  localSigningIdentity: Flag.String("local-signing-identity").pipe(
+    Flag.withDescription(
+      "Persistent local macOS certificate SHA-1 fingerprint; no notarization (env: T3CODE_DESKTOP_LOCAL_SIGNING_IDENTITY).",
     ),
     Flag.optional,
   ),

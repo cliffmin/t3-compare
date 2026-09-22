@@ -22,6 +22,8 @@ import {
   createStageWorkspaceConfig,
   createStagePatchedDependencies,
   createBuildConfig,
+  createDesktopSigningEnvironment,
+  LocalMacSigningError,
   DESKTOP_ELECTRON_LANGUAGES,
   DESKTOP_FILE_EXCLUSIONS,
   DESKTOP_EXTRA_RESOURCES,
@@ -2096,6 +2098,151 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     );
   });
 
+  it.effect("keeps local signing separate from distribution and ad-hoc modes", () =>
+    Effect.gen(function* () {
+      const identity = "0123456789ABCDEF0123456789ABCDEF01234567";
+      const local = yield* createBuildConfig(
+        "mac",
+        "zip",
+        "0.0.42-compare.12",
+        false,
+        false,
+        undefined,
+        undefined,
+        false,
+        "arm64",
+        identity,
+      );
+      const mac = local.mac as Record<string, unknown>;
+      assert.equal(mac.identity, identity);
+      assert.equal(mac.notarize, false);
+      assert.equal(mac.timestamp, "none");
+      assert.equal(local.forceCodeSigning, true);
+      assert.match(String(mac.sign), /sign-macos\.ts$/);
+      const distribution = yield* createBuildConfig(
+        "mac",
+        "zip",
+        "0.0.42",
+        true,
+        false,
+        undefined,
+        undefined,
+      );
+      assert.equal((distribution.mac as Record<string, unknown>).identity, undefined);
+      assert.equal((distribution.mac as Record<string, unknown>).notarize, undefined);
+    }),
+  );
+
+  it.effect("resolves local identity CLI over env and rejects incompatible modes", () =>
+    Effect.gen(function* () {
+      const identity = "0123456789ABCDEF0123456789ABCDEF01234567";
+      const input = {
+        platform: Option.some("mac" as const),
+        target: Option.some("zip"),
+        arch: Option.some("arm64" as const),
+        buildVersion: Option.none<string>(),
+        outputDir: Option.none<string>(),
+        skipBuild: Option.none<boolean>(),
+        keepStage: Option.none<boolean>(),
+        signed: Option.none<boolean>(),
+        localSigningIdentity: Option.none<string>(),
+        verbose: Option.none<boolean>(),
+        mockUpdates: Option.none<boolean>(),
+        mockUpdateServerPort: Option.none<number>(),
+        wslRuntime: Option.none<string>(),
+      };
+      const layer = Layer.mergeAll(
+        Layer.succeed(HostProcessPlatform, "darwin"),
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({
+            env: { T3CODE_DESKTOP_LOCAL_SIGNING_IDENTITY: identity.toLowerCase() },
+          }),
+        ),
+      );
+      assert.equal(
+        (yield* resolveBuildOptions(input).pipe(Effect.provide(layer))).localSigningIdentity,
+        identity,
+      );
+      assert.equal(
+        (yield* resolveBuildOptions({
+          ...input,
+          localSigningIdentity: Option.some("A".repeat(40)),
+        }).pipe(Effect.provide(layer))).localSigningIdentity,
+        "A".repeat(40),
+      );
+      for (const changed of [
+        { ...input, signed: Option.some(true) },
+        { ...input, platform: Option.some("linux" as const) },
+        { ...input, target: Option.some("mas") },
+        { ...input, localSigningIdentity: Option.some("-") },
+        { ...input, localSigningIdentity: Option.some("") },
+      ]) {
+        const error = yield* Effect.flip(resolveBuildOptions(changed).pipe(Effect.provide(layer)));
+        assert.instanceOf(error, LocalMacSigningError);
+      }
+      const signedEnv = ConfigProvider.layer(
+        ConfigProvider.fromEnv({
+          env: {
+            T3CODE_DESKTOP_LOCAL_SIGNING_IDENTITY: identity,
+            T3CODE_DESKTOP_SIGNED: "true",
+          },
+        }),
+      );
+      const error = yield* Effect.flip(
+        resolveBuildOptions(input).pipe(
+          Effect.provide(signedEnv),
+          Effect.provideService(HostProcessPlatform, "darwin"),
+        ),
+      );
+      assert.instanceOf(error, LocalMacSigningError);
+      const resolved = yield* resolveBuildOptions({ ...input, signed: Option.some(false) }).pipe(
+        Effect.provide(signedEnv),
+        Effect.provideService(HostProcessPlatform, "darwin"),
+      );
+      assert.equal(resolved.signed, false);
+      assert.equal(resolved.localSigningIdentity, identity);
+    }),
+  );
+
+  it("removes imported signing and notarization credentials only for local mode", () => {
+    const identity = "0123456789ABCDEF0123456789ABCDEF01234567";
+    const credentials = {
+      CSC_NAME: "other",
+      CSC_LINK: "unused",
+      CSC_KEY_PASSWORD: "fixture",
+      CSC_KEYCHAIN: "other",
+      CSC_INSTALLER_LINK: "unused",
+      CSC_INSTALLER_KEY_PASSWORD: "fixture",
+      APPLE_ID: "fixture",
+      APPLE_APP_SPECIFIC_PASSWORD: "fixture",
+      APPLE_TEAM_ID: "fixture",
+      APPLE_API_KEY: "fixture",
+      APPLE_API_KEY_ID: "fixture",
+      APPLE_API_ISSUER: "fixture",
+      APPLE_KEYCHAIN: "fixture",
+      APPLE_KEYCHAIN_PROFILE: "fixture",
+    };
+    const env = {
+      ...credentials,
+      PATH: "/usr/bin",
+      EMPTY: "",
+      T3CODE_DESKTOP_LOCAL_SIGNING_IDENTITY: "B".repeat(40),
+    };
+    const local = createDesktopSigningEnvironment(env, false, identity);
+    for (const key of Object.keys(credentials)) assert.equal(local[key], undefined);
+    assert.equal(local.CSC_IDENTITY_AUTO_DISCOVERY, "false");
+    assert.equal(local.T3CODE_DESKTOP_LOCAL_SIGNING_IDENTITY, identity);
+    assert.equal(local.PATH, "/usr/bin");
+    assert.equal(local.EMPTY, undefined);
+    const distribution = createDesktopSigningEnvironment(credentials, true);
+    assert.deepStrictEqual(distribution, credentials);
+    assert.equal(
+      createDesktopSigningEnvironment(env, false).T3CODE_DESKTOP_LOCAL_SIGNING_IDENTITY,
+      undefined,
+    );
+    assert.equal(env.CSC_NAME, "other");
+  });
+
   it.effect("resolves default platform and architecture from host references", () =>
     Effect.gen(function* () {
       const resolved = yield* resolveBuildOptions({
@@ -2107,6 +2254,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         skipBuild: Option.none(),
         keepStage: Option.none(),
         signed: Option.none(),
+        localSigningIdentity: Option.none(),
         verbose: Option.none(),
         mockUpdates: Option.none(),
         mockUpdateServerPort: Option.none(),
@@ -2147,6 +2295,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
             skipBuild: Option.none(),
             keepStage: Option.none(),
             signed: Option.none(),
+            localSigningIdentity: Option.none(),
             verbose: Option.none(),
             mockUpdates: Option.none(),
             mockUpdateServerPort: Option.none(),
@@ -2171,6 +2320,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         skipBuild: Option.some(false),
         keepStage: Option.some(false),
         signed: Option.some(false),
+        localSigningIdentity: Option.none(),
         verbose: Option.some(false),
         mockUpdates: Option.some(false),
         mockUpdateServerPort: Option.none(),
