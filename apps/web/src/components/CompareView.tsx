@@ -251,7 +251,11 @@ function CompareColumn({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{label}</p>
           <p className="break-words text-xs text-muted-foreground">
-            {comparisonSelectionSummary(entry)}
+            {comparisonSelectionSummary(
+              entry,
+              provider?.models.find((model) => model.slug === entry.model)?.capabilities
+                ?.optionDescriptors,
+            )}
           </p>
         </div>
         <span className="shrink-0 text-xs text-muted-foreground">
