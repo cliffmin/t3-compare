@@ -39,6 +39,7 @@ const CompareRunEntrySchema = Schema.Struct({
    * quietly narrower than the set of providers that were asked.
    */
   threadId: Schema.NullOr(ThreadId),
+  initialMessageId: Schema.optionalKey(MessageId),
   instanceId: ProviderInstanceId,
   model: Schema.String,
   label: Schema.optionalKey(Schema.String),

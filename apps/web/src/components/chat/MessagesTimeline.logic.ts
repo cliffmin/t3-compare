@@ -1,3 +1,5 @@
+import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import { resolveUserMessageContext } from "../../lib/composerContextRecords";
 import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
 export { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
 import * as Equal from "effect/Equal";
@@ -1672,4 +1674,31 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
       );
     }
   }
+}
+
+/** Suppress shared prompt prose only after native grouping, retaining attachments/context. */
+export function hideSharedUserPrompt(
+  rows: MessagesTimelineRow[],
+  messageId: MessageId | undefined,
+): MessagesTimelineRow[] {
+  if (!messageId) return rows;
+  return rows.flatMap((row) => {
+    if (row.kind !== "message" || row.message.role !== "user" || row.message.id !== messageId)
+      return [row];
+    const context = resolveUserMessageContext(row.message);
+    const references = collectComposerContextReferences(context.text);
+    if (!row.message.attachments?.length && references.length === 0 && context.records.length === 0)
+      return [];
+    // Only the painted message changes. Canonical entries already supplied the turn boundaries.
+    return [
+      {
+        ...row,
+        message: {
+          ...row.message,
+          text: references.map((reference) => reference.source).join(" "),
+          context: { version: 1 as const, records: context.records },
+        },
+      },
+    ];
+  });
 }

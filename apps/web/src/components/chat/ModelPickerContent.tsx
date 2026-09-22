@@ -1089,7 +1089,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                 No models found
               </ComboboxEmpty>
             )}
-            {props.comparison?.mergerSettings}
             {props.comparison ? (
               <div
                 aria-label="Comparison configuration"
@@ -1104,7 +1103,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                     {comparisonSelectionSummary(selection)}
                   </p>
                 ))}
-                {props.comparison.mergerSummary}
               </div>
             ) : null}
           </div>

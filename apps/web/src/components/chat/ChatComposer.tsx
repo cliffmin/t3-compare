@@ -1,5 +1,4 @@
-import { comparisonSelectionSummary, withComparisonDefaults } from "../../compareProviders";
-import { useComparisonMergePreferences } from "../../comparisonMergePreferences";
+import { withComparisonDefaults } from "../../compareProviders";
 import { Switch } from "../ui/switch";
 import { DESKTOP_PASTE_AS_TEXT_EVENT } from "../../lib/desktopPasteAsText";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
@@ -4949,23 +4948,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       }
     >
   >({});
-  const mergePreferences = useComparisonMergePreferences();
-  const mergerSelection = mergePreferences.selections[environmentId] ?? comparisonModels[0];
-  const mergerEntry = providerInstanceEntries.find(
-    (entry) => entry.instanceId === mergerSelection?.instanceId,
-  );
-  const effectiveMerger =
-    mergerEntry && mergerSelection
-      ? withComparisonDefaults(mergerEntry, mergerSelection, settings.planModeEnabled)
-      : mergerSelection;
-  useEffect(() => {
-    if (
-      effectiveMerger &&
-      JSON.stringify(mergePreferences.selections[environmentId]) !== JSON.stringify(effectiveMerger)
-    ) {
-      mergePreferences.select(environmentId, effectiveMerger);
-    }
-  }, [environmentId, effectiveMerger, mergePreferences]);
   const rememberedComparison = comparisonMemory[comparisonKey];
   const getComparisonSelection = (instanceId: ProviderInstanceId) =>
     multipleModelSelections?.find((selection) => selection.instanceId === instanceId) ??
@@ -4993,50 +4975,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     multipleModelSelections === null
       ? undefined
       : {
-          mergerSettings: effectiveMerger ? (
-            <section
-              className="min-h-0 overflow-y-auto border-t border-border/70 px-3 py-3"
-              aria-label="Merge answer settings"
-            >
-              <h3 className="text-xs font-semibold">Merge answer</h3>
-              <p className="mb-2 text-xs text-muted-foreground">
-                Combine completed answers automatically.
-              </p>
-              <ProviderModelPicker
-                activeInstanceId={effectiveMerger.instanceId}
-                model={effectiveMerger.model}
-                lockedProvider={null}
-                instanceEntries={providerInstanceEntries}
-                modelOptionsByInstance={modelOptionsByInstance}
-                onInstanceModelChange={(instanceId, model) =>
-                  mergePreferences.select(environmentId, createModelSelection(instanceId, model))
-                }
-              />
-              {mergerEntry ? (
-                <ComparisonProviderOptions
-                  entry={mergerEntry}
-                  selection={effectiveMerger}
-                  planModeEnabled={settings.planModeEnabled}
-                  onChange={(selection) => mergePreferences.select(environmentId, selection)}
-                />
-              ) : null}
-              <label className="mt-2 block text-xs">
-                Additional direction (optional)
-                <textarea
-                  className="mt-1 w-full rounded border border-border bg-background p-2"
-                  rows={2}
-                  value={mergePreferences.directions[comparisonKey] ?? ""}
-                  onChange={(event) => mergePreferences.direct(comparisonKey, event.target.value)}
-                />
-              </label>
-            </section>
-          ) : null,
-          mergerSummary: effectiveMerger ? (
-            <p className="border-t border-border/60 pt-2">
-              Merge · {mergerEntry?.displayName ?? effectiveMerger.instanceId} ·{" "}
-              {comparisonSelectionSummary(effectiveMerger)}
-            </p>
-          ) : null,
           selections: multipleModelSelections,
           summarySelections: multipleModelSelections.map((selection) => {
             const entry = providerInstanceEntries.find(
@@ -5050,7 +4988,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     provider: entry.driverKind,
                     model: selection.model,
                     models: entry.models,
-                    modelOptions: selection.options,
+                    modelOptions: withComparisonDefaults(entry, selection, settings.planModeEnabled)
+                      .options,
                     promptInjectionState: composerPromptInjectionState,
                     planModeEnabled: settings.planModeEnabled,
                   }).modelOptionsForDispatch,

@@ -11,6 +11,8 @@ import { cn } from "~/lib/utils";
 import { ComposerBanner } from "./ComposerBanner";
 
 interface PendingUserInputPanelProps {
+  /** Multiple embedded threads must not all handle document-wide number keys. */
+  keyboardScopeRef?: React.RefObject<HTMLElement | null>;
   pendingUserInputs: PendingUserInput[];
   respondingRequestIds: ApprovalRequestId[];
   answers: Record<string, PendingUserInputDraftAnswer>;
@@ -21,6 +23,7 @@ interface PendingUserInputPanelProps {
 }
 
 export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserInputPanel({
+  keyboardScopeRef,
   pendingUserInputs,
   respondingRequestIds,
   answers,
@@ -35,6 +38,7 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
 
   return (
     <ComposerPendingUserInputCard
+      keyboardScopeRef={keyboardScopeRef}
       key={activePrompt.requestId}
       prompt={activePrompt}
       isResponding={respondingRequestIds.includes(activePrompt.requestId)}
@@ -48,6 +52,7 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
 });
 
 const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard({
+  keyboardScopeRef,
   prompt,
   isResponding,
   answers,
@@ -56,6 +61,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   onAdvance,
   onDismiss,
 }: {
+  keyboardScopeRef?: React.RefObject<HTMLElement | null> | undefined;
   prompt: PendingUserInput;
   isResponding: boolean;
   answers: Record<string, PendingUserInputDraftAnswer>;
@@ -143,6 +149,11 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     const handler = (event: globalThis.KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target;
+      if (
+        keyboardScopeRef &&
+        (!(target instanceof Node) || !keyboardScopeRef.current?.contains(target))
+      )
+        return;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
         return;
       }
@@ -163,7 +174,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [activeQuestion, handleOptionSelection, isCollapsed, isResponding]);
+  }, [activeQuestion, handleOptionSelection, isCollapsed, isResponding, keyboardScopeRef]);
 
   if (!activeQuestion) {
     return null;

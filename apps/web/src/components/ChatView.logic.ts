@@ -1400,3 +1400,42 @@ export function restorePlanFollowUpComposer(input: {
     detectTrigger: true,
   });
 }
+
+/** Shared native compaction state for full threads and embedded timelines. */
+export function isThreadCompacting(input: {
+  thread: Thread | null | undefined;
+  optimisticMessage?: ChatMessage | undefined;
+  isSendBusy: boolean;
+  phase: string;
+}): boolean {
+  const pending =
+    input.isSendBusy && input.optimisticMessage && isCompactCommandMessage(input.optimisticMessage)
+      ? input.optimisticMessage
+      : input.thread?.messages.findLast(isCompactCommandMessage);
+  const turn = input.thread?.latestTurn;
+  const active =
+    pending !== undefined &&
+    (pending.createdAt > (turn?.requestedAt ?? pending.createdAt) ||
+      (turn?.state === "running" && pending.createdAt === turn.requestedAt));
+  const settled =
+    pending !== undefined &&
+    (latestTurnStartFailureId(input.thread ?? undefined, pending.id) !== null ||
+      input.thread?.activities.some(
+        (activity) =>
+          activity.kind === "context-compaction" &&
+          (activity.payload as { readonly requestId?: unknown } | null)?.requestId === pending.id,
+      ));
+  return (
+    (input.isSendBusy || input.phase === "connecting" || input.phase === "running") &&
+    active &&
+    !settled
+  );
+}
+
+export function isCompactCommandMessage(message: ChatMessage): boolean {
+  return (
+    message.role === "user" &&
+    message.text.trim().toLowerCase() === "/compact" &&
+    !message.attachments?.length
+  );
+}

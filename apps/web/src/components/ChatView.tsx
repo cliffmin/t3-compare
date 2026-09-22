@@ -1,5 +1,5 @@
+import { downloadChatAttachment } from "../attachmentActions";
 import { withComparisonDefaults } from "../compareProviders";
-import { useComparisonMergePreferences } from "../comparisonMergePreferences";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import type { UsageLimitSourceSnapshots } from "@t3tools/contracts";
@@ -429,6 +429,8 @@ import {
   dismissBranchMismatchForSession,
   hasEnvironmentReconnectWarningGraceElapsed,
   latestTurnStartFailureId,
+  isThreadCompacting,
+  isCompactCommandMessage,
   scheduleEnvironmentReconnectWarning,
   hasServerAcknowledgedLocalDispatch,
   isBranchMismatchDismissedForSession,
@@ -734,11 +736,6 @@ function formatOutgoingPrompt(params: {
 }
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
-
-function isCompactCommandMessage(message: ChatMessage): boolean {
-  const text = message.text.trim().toLowerCase();
-  return message.role === "user" && text === "/compact" && !message.attachments?.length;
-}
 
 type ChatViewProps =
   | {
@@ -3213,31 +3210,12 @@ export default function ChatView(props: ChatViewProps) {
     activePendingUserInput: activePendingUserInput?.requestId ?? null,
     threadError,
   });
-  const optimisticCompactionMessage = optimisticUserMessages.at(-1);
-  const pendingCompactionMessage =
-    isSendBusy &&
-    optimisticCompactionMessage !== undefined &&
-    isCompactCommandMessage(optimisticCompactionMessage)
-      ? optimisticCompactionMessage
-      : activeThread?.messages.findLast(isCompactCommandMessage);
-  const compactRequestIsActive =
-    pendingCompactionMessage !== undefined &&
-    (pendingCompactionMessage.createdAt >
-      (activeLatestTurn?.requestedAt ?? pendingCompactionMessage.createdAt) ||
-      (activeLatestTurn?.state === "running" &&
-        pendingCompactionMessage.createdAt === activeLatestTurn.requestedAt));
-  const compactionSettled =
-    pendingCompactionMessage !== undefined &&
-    (latestTurnStartFailureId(activeThread, pendingCompactionMessage.id) !== null ||
-      activeThread?.activities.some((activity) => {
-        if (activity.kind !== "context-compaction") return false;
-        const payload = activity.payload as { readonly requestId?: unknown } | null | undefined;
-        return payload?.requestId === pendingCompactionMessage.id;
-      }));
-  const isCompacting =
-    (isSendBusy || phase === "connecting" || phase === "running") &&
-    compactRequestIsActive &&
-    !compactionSettled;
+  const isCompacting = isThreadCompacting({
+    thread: activeThread,
+    optimisticMessage: optimisticUserMessages.at(-1),
+    isSendBusy,
+    phase,
+  });
   // The server records a running worktree setup on the thread for the whole
   // bootstrap window. That record, with no turn yet, is how a reload or another
   // client sees a worktree still being prepared, so it counts as working like
@@ -3332,32 +3310,12 @@ export default function ChatView(props: ChatViewProps) {
   const [projectServerMessagePreviews] = useState(createMessageAttachmentPreviewProjector);
   const [projectHandoffMessagePreviews] = useState(createMessageAttachmentPreviewProjector);
   const downloadFileAttachment = useCallback(
-    async (attachment: ChatFileAttachment) => {
-      const connection = readPreparedConnection(environmentId);
-      if (!connection) {
-        toastManager.add({ type: "error", title: "The environment is not connected." });
-        return;
-      }
-
-      try {
-        const url = await resolveFileAttachmentUrl({
-          attachment,
-          environmentId,
-          httpBaseUrl: connection.httpBaseUrl,
-          createAssetUrl: createAttachmentAssetUrl,
-        });
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = attachment.name;
-        anchor.click();
-      } catch (error) {
-        toastManager.add({
-          type: "error",
-          title: "Could not download " + attachment.name,
-          description: error instanceof Error ? error.message : "The attachment is unavailable.",
-        });
-      }
-    },
+    (attachment: ChatFileAttachment) =>
+      downloadChatAttachment({
+        attachment,
+        environmentId,
+        createAssetUrl: createAttachmentAssetUrl,
+      }),
     [createAttachmentAssetUrl, environmentId],
   );
   const openFileAttachment = useCallback(
@@ -7741,6 +7699,10 @@ export default function ChatView(props: ChatViewProps) {
       };
     };
 
+    if (multipleModelSelections !== null && multipleModelSelections.length < 2) {
+      setThreadError(threadIdForSend, "Select at least two available providers to compare.");
+      return;
+    }
     const multipleTargets = [];
     for (const selection of multipleModelSelections ?? []) {
       const provider = providerInstanceEntries.find(
@@ -7750,16 +7712,25 @@ export default function ChatView(props: ChatViewProps) {
         setThreadError(threadIdForSend, `Provider for ${selection.model} is unavailable.`);
         return;
       }
+      if (!provider.models.some((model) => model.slug === selection.model)) {
+        setThreadError(threadIdForSend, `Model ${selection.model} is no longer available.`);
+        return;
+      }
       const providerBlockReason = getAntigravitySendBlockReason(provider.snapshot, selection.model);
       if (providerBlockReason) {
         setThreadError(threadIdForSend, providerBlockReason);
         return;
       }
+      const effectiveSelection = withComparisonDefaults(
+        provider,
+        selection,
+        settings.planModeEnabled,
+      );
       const providerState = getComposerProviderState({
         provider: provider.driverKind,
         model: selection.model,
         models: provider.models,
-        modelOptions: selection.options,
+        modelOptions: effectiveSelection.options,
         promptInjectionState: getComposerPromptInjectionState(messageTextForSend),
         planModeEnabled: settings.planModeEnabled,
       });
@@ -7930,12 +7901,9 @@ export default function ChatView(props: ChatViewProps) {
       }),
     );
     if (multipleModelSelections !== null) {
-      const mergePreferences = useComparisonMergePreferences.getState();
-      const merger = mergePreferences.selections[environmentId];
-      const mergeDraftKey = `${environmentId}:${draftId ?? ""}`;
-      const mergeDirection = mergePreferences.directions[mergeDraftKey] ?? "";
       const runId = newCompareRunId();
       const originalThreadIds = multipleTargets.map(() => newThreadId());
+      const originalMessageIds = multipleTargets.map(() => newMessageId());
       const failedSelections: ModelSelection[] = [];
       // One slot per selected provider, indexed by its position in the
       // picker rather than by the order requests happen to settle, so the
@@ -7950,19 +7918,6 @@ export default function ChatView(props: ChatViewProps) {
       let canRestoreDraft = () => false;
       let startedCount = 0;
       try {
-        const mergerProvider = providerInstanceEntries.find(
-          (entry) => entry.instanceId === merger?.instanceId,
-        );
-        if (
-          !merger ||
-          !mergerProvider?.enabled ||
-          !mergerProvider.isAvailable ||
-          mergerProvider.status !== "ready" ||
-          !mergerProvider.models.some((model) => model.slug === merger.model)
-        )
-          throw new Error(
-            "Choose an available merger and model in comparison settings before sending.",
-          );
         const attachments = await turnAttachmentsPromise;
         const fileBlockReason = readLiveAttachmentCapabilities().fileBlockReason;
         if (fileBlockReason !== null) throw new Error(fileBlockReason);
@@ -7999,19 +7954,9 @@ export default function ChatView(props: ChatViewProps) {
           environmentId,
           projectId: activeProject.id,
           prompt: messageTextForSend,
-          automatic: {
-            config: {
-              modelSelection: withComparisonDefaults(
-                mergerProvider,
-                merger,
-                settings.planModeEnabled,
-              ),
-              direction: mergeDirection,
-            },
-            status: "waiting",
-          },
           entries: multipleTargets.map((target, index) => ({
             threadId: originalThreadIds[index]!,
+            initialMessageId: originalMessageIds[index]!,
             instanceId: target.selection.instanceId,
             label:
               providerInstanceEntries.find(
@@ -8022,7 +7967,6 @@ export default function ChatView(props: ChatViewProps) {
             launch: "pending",
           })),
         });
-        mergePreferences.direct(mergeDraftKey, "");
         void navigate({ to: "/compare/$runId", params: { runId } });
         const starts = Promise.all(
           multipleTargets.map(async (target, targetIndex) => {
@@ -8049,7 +7993,7 @@ export default function ChatView(props: ChatViewProps) {
                 input: {
                   threadId: targetThreadId,
                   message: {
-                    messageId: newMessageId(),
+                    messageId: originalMessageIds[targetIndex]!,
                     role: "user",
                     text:
                       context && !supportsInlineMessageContext
@@ -8099,6 +8043,7 @@ export default function ChatView(props: ChatViewProps) {
               attemptedEntries[targetIndex] = {
                 launch: "started",
                 threadId: targetThreadId,
+                initialMessageId: originalMessageIds[targetIndex]!,
                 instanceId: target.selection.instanceId,
                 model: target.selection.model,
                 ...(target.selection.options ? { options: target.selection.options } : {}),
@@ -8107,6 +8052,7 @@ export default function ChatView(props: ChatViewProps) {
               attemptedEntries[targetIndex] = {
                 launch: requestMayHaveStarted ? "uncertain" : "failed",
                 threadId: requestMayHaveStarted ? targetThreadId : null,
+                initialMessageId: originalMessageIds[targetIndex]!,
                 instanceId: target.selection.instanceId,
                 model: target.selection.model,
                 ...(target.selection.options ? { options: target.selection.options } : {}),
@@ -8168,20 +8114,18 @@ export default function ChatView(props: ChatViewProps) {
             } finally {
               const entry = attemptedEntries[targetIndex];
               if (entry)
-                useCompareRunStore
-                  .getState()
-                  .updateRun(runId, (current) => ({
-                    ...current,
-                    entries: current.entries.map((existing, index) =>
-                      index === targetIndex
-                        ? {
-                            ...entry,
-                            ...(existing.label ? { label: existing.label } : {}),
-                            ...(existing.original ? { original: existing.original } : {}),
-                          }
-                        : existing,
-                    ),
-                  }));
+                useCompareRunStore.getState().updateRun(runId, (current) => ({
+                  ...current,
+                  entries: current.entries.map((existing, index) =>
+                    index === targetIndex
+                      ? {
+                          ...entry,
+                          ...(existing.label ? { label: existing.label } : {}),
+                          ...(existing.original ? { original: existing.original } : {}),
+                        }
+                      : existing,
+                  ),
+                }));
             }
           }),
         );

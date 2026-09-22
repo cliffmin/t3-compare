@@ -46,6 +46,9 @@ import {
   isTerminalSubagentStatus,
 } from "@t3tools/client-runtime/state/subagentRuntime";
 
+export const USER_MESSAGE_BUBBLE_CLASS =
+  "relative max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground";
+
 const EMPTY_AGENT_PANEL_MODEL = emptyAgentPanelModel();
 const NOOP_OPEN_AGENTS = () => {};
 const EMPTY_QUEUED_MESSAGES: ReadonlyArray<QueuedComposerMessage> = [];
@@ -178,6 +181,7 @@ import { useAssistantCitationTarget, type CitationHistoryPage } from "./useAssis
 import {
   computeStableMessagesTimelineRows,
   deriveMessagesTimelineRowsWithState,
+  hideSharedUserPrompt,
   deriveUnsettledTurnId,
   type MessagesTimelineRowsProjection,
   liveWorkEntryLabel,
@@ -399,6 +403,8 @@ const TIMELINE_MAINTAIN_SCROLL_AT_END_SMOOTH = {
 // ---------------------------------------------------------------------------
 
 interface MessagesTimelineProps {
+  /** Hide only presentation after native turn/work grouping has been computed. */
+  hiddenUserMessageId?: MessageId | undefined;
   citationRequest?: AssistantCitationRequest | null;
   citationHistoryLoading?: boolean;
   onCiteAssistantText?: (
@@ -477,6 +483,7 @@ interface MessagesTimelineProps {
 // ---------------------------------------------------------------------------
 
 export const MessagesTimeline = memo(function MessagesTimeline({
+  hiddenUserMessageId,
   citationRequest = null,
   citationHistoryLoading = false,
   onCiteAssistantText,
@@ -811,7 +818,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     worktreeSetup,
     queuedMessages,
   ]);
-  const rows = useStableRows(rawRows, listIdentityKey);
+  const visibleRows = useMemo(
+    () => hideSharedUserPrompt(rawRows, hiddenUserMessageId),
+    [rawRows, hiddenUserMessageId],
+  );
+  const rows = useStableRows(visibleRows, listIdentityKey);
   const minimapItems = useMemo(() => deriveTimelineMinimapItems(rows), [rows]);
   const restoreRowIndex =
     restoringThreadPosition && rememberedPosition?.atEnd === false
@@ -2089,7 +2100,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
 
   return (
     <div className="group flex flex-col items-end gap-1">
-      <div className="relative max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
+      <div className={USER_MESSAGE_BUBBLE_CLASS}>
         <MessageAuthorHeading>You</MessageAuthorHeading>
         {(regularImages.length > 0 || userVideos.length > 0) && (
           <div className="mb-2 grid max-w-[210px] grid-cols-2 gap-2">
@@ -2195,6 +2206,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
         ) : null}
         <div onCopyCapture={onBodyCopyCapture}>
           <CollapsibleUserMessageBody
+            threadRef={ctx.threadRef ?? undefined}
             text={resolvedContext.text}
             renderContextReference={renderContextReference}
             skills={ctx.skills}
@@ -3997,7 +4009,8 @@ function shouldCollapseUserMessage(text: string): boolean {
   );
 }
 
-const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(props: {
+export const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(props: {
+  threadRef?: ScopedThreadRef | undefined;
   text: string;
   renderContextReference: (reference: ChatMarkdownContextReference) => ReactNode;
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
@@ -4028,6 +4041,7 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
           }
         >
           <UserMessageBody
+            threadRef={props.threadRef}
             text={props.text}
             renderContextReference={props.renderContextReference}
             skills={props.skills}
@@ -4066,12 +4080,12 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
 });
 
 const UserMessageBody = memo(function UserMessageBody(props: {
+  threadRef?: ScopedThreadRef | undefined;
   text: string;
   renderContextReference: (reference: ChatMarkdownContextReference) => ReactNode;
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
   markdownCwd: string | undefined;
 }) {
-  const ctx = use(TimelineRowCtx);
   if (props.text.length === 0) {
     return null;
   }
@@ -4079,7 +4093,7 @@ const UserMessageBody = memo(function UserMessageBody(props: {
     <ChatMarkdown
       text={props.text}
       cwd={props.markdownCwd}
-      threadRef={ctx.threadRef ?? undefined}
+      threadRef={props.threadRef}
       skills={props.skills}
       className="text-message-foreground"
       lineBreaks

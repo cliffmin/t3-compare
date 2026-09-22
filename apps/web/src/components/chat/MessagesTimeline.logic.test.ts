@@ -1,3 +1,6 @@
+import { serializeLegacyContextMessage } from "@t3tools/shared/composerContextLegacySend";
+import { formatComposerContextReference } from "@t3tools/shared/composerContextReferences";
+import { buildMessageContext, resolveUserMessageContext } from "../../lib/composerContextRecords";
 import { describe, expect, it } from "vite-plus/test";
 import {
   ApprovalRequestId,
@@ -20,6 +23,7 @@ import {
 import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/unstable/reactivity";
 import {
+  hideSharedUserPrompt,
   computeStableMessagesTimelineRows,
   computeMessageDurationStart,
   deriveMessagesTimelineRows,
@@ -123,6 +127,116 @@ describe("streaming row projection", () => {
     } satisfies Parameters<typeof deriveMessagesTimelineRows>[0];
     return { messages, work, timeline, input, time, turnId, historyTurnId };
   }
+
+  it("hides the shared prompt after grouping, preserving later users and work", () => {
+    const sample = fixture("Final text");
+    const rows = deriveMessagesTimelineRows(sample.input);
+    const initialId = sample.messages.find((message) => message.role === "user")!.id;
+    const visible = hideSharedUserPrompt(rows, initialId);
+    expect(visible.length).toBe(rows.length - 1);
+    for (const row of visible) expect(rows).toContain(row);
+    expect(
+      visible.filter((row) => row.kind === "message" && row.message.role === "user"),
+    ).toHaveLength(1);
+    expect(sample.messages[0]?.text).toBe("Inspect");
+    const completed = deriveMessagesTimelineRows({
+      ...sample.input,
+      isWorking: false,
+      runningTurnId: null,
+      latestTurn: { ...sample.input.latestTurn, state: "completed", completedAt: sample.time(12) },
+    });
+    const hiddenCompleted = hideSharedUserPrompt(completed, initialId);
+    expect(hiddenCompleted.filter((row) => row.kind !== "message")).toEqual(
+      completed.filter((row) => row.kind !== "message"),
+    );
+  });
+
+  it("keeps initial attachments without changing the canonical prompt", () => {
+    const sample = fixture("Answer");
+    const initial = sample.messages[0]!;
+    const attachment = {
+      type: "file" as const,
+      id: "fixture-file",
+      name: "notes.txt",
+      mimeType: "text/plain",
+      sizeBytes: 20,
+    };
+    const messages = [{ ...initial, attachments: [attachment] }, ...sample.messages.slice(1)];
+    const rows = deriveMessagesTimelineRows({
+      ...sample.input,
+      timelineEntries: deriveTimelineEntries(messages, [], sample.work),
+    });
+    const visible = hideSharedUserPrompt(rows, initial.id);
+    const kept = visible.find((row) => row.kind === "message" && row.message.id === initial.id);
+    expect(kept).toMatchObject({ message: { text: "", attachments: [attachment] } });
+    expect(messages[0]?.text).toBe("Inspect");
+  });
+
+  it.each([false, true])(
+    "retains decoded context records when hiding shared prose (legacy=%s)",
+    (legacy) => {
+      const sample = fixture("Answer");
+      const context = buildMessageContext({
+        terminalContexts: [
+          {
+            id: "terminal-fixture",
+            threadId: ThreadId.make("fixture"),
+            terminalId: "default",
+            terminalLabel: "Fixture terminal",
+            lineStart: 1,
+            lineEnd: 1,
+            text: "synthetic output",
+            createdAt: sample.time(0),
+          },
+        ],
+        reviewComments: [
+          {
+            id: "review-fixture",
+            sectionId: "section",
+            sectionTitle: "Review",
+            filePath: "fixture.ts",
+            startIndex: 0,
+            endIndex: 0,
+            rangeLabel: "L1",
+            text: "Synthetic review",
+            diff: "",
+          },
+        ],
+        previewAnnotations: [],
+      })!;
+      const text =
+        "Inspect " +
+        context.records
+          .map((record) =>
+            formatComposerContextReference({
+              kind: record.kind,
+              contextId: record.contextId,
+              label: "fixture",
+            }),
+          )
+          .join(" ");
+      const message = {
+        ...sample.messages[0]!,
+        text: legacy ? serializeLegacyContextMessage({ text, records: context.records }) : text,
+        ...(legacy ? {} : { context }),
+      };
+      const messages = [message, ...sample.messages.slice(1)];
+      const rows = deriveMessagesTimelineRows({
+        ...sample.input,
+        timelineEntries: deriveTimelineEntries(messages, [], sample.work),
+      });
+      const result = hideSharedUserPrompt(rows, message.id).find(
+        (row) => row.kind === "message" && row.message.id === message.id,
+      );
+      expect(result?.kind).toBe("message");
+      if (result?.kind !== "message") throw new Error("Expected retained context row");
+      expect(resolveUserMessageContext(result.message).records).toEqual(
+        resolveUserMessageContext(message).records,
+      );
+      expect(result.message.text).not.toContain("Inspect");
+      expect(message.text).toContain("Inspect");
+    },
+  );
 
   it.each([
     ["", "Now visible"],

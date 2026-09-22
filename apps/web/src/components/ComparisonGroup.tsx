@@ -1,4 +1,3 @@
-import { AUTOMATIC_COMPARISON_LABEL } from "../automaticComparison";
 import { useEffect, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
@@ -86,7 +85,7 @@ export function ComparisonGroup({
       {!run.collapsed ? (
         <>
           <ul className="ml-4 border-l border-border/70 pl-2">{children}</ul>
-          {output?.output || run.automatic ? (
+          {(run.merges?.length ?? 0) > 0 || run.automatic ? (
             <div className="ml-4 mt-3 border-l border-border/70 pl-2">
               <Link
                 to="/compare/$runId"
@@ -99,14 +98,8 @@ export function ComparisonGroup({
                 }}
                 className="block rounded-lg px-2 py-2 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <p className="truncate text-sm">{output?.output?.title ?? "Merged"}</p>
-                <p className="text-xs text-muted-foreground">
-                  {output?.output
-                    ? `Merged from ${output.output.sources.length} selected`
-                    : run.automatic
-                      ? AUTOMATIC_COMPARISON_LABEL[run.automatic.status]
-                      : ""}
-                </p>
+                <p className="truncate text-sm">Saved merged results</p>
+                <p className="text-xs text-muted-foreground">Read-only history</p>
               </Link>
             </div>
           ) : null}
