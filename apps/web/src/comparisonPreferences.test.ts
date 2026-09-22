@@ -125,6 +125,37 @@ describe("remembered comparison intent", () => {
     store.getState().clearDraft("new");
     expect(store.getState().openDraft("new", env, EMPTY_COMPARISON_PREFERENCES)).toEqual(changed);
   });
+  it.each([true, false])(
+    "reopening an older draft never replaces newer defaults (online=%s)",
+    (authoritative) => {
+      const disk = storage();
+      const store = createComparisonPreferencesStore(disk);
+      const x = reconcileComparisonPreferences(prefs, catalog());
+      store.getState().editDraft("A", env, x);
+      store.getState().openDraft("B", env, EMPTY_COMPARISON_PREFERENCES, catalog());
+      const y = editComparisonPreferences(
+        x,
+        createModelSelection(a, "legacy", [
+          { id: "reasoningEffort", value: "medium" },
+          { id: "fastMode", value: false },
+        ]),
+      );
+      store.getState().editDraft("B", env, y);
+      const persisted = disk.getItem(COMPARISON_PREFERENCES_KEY);
+      // This is the same restore operation used by the off -> on toggle.
+      expect(
+        store
+          .getState()
+          .openDraft("A", env, EMPTY_COMPARISON_PREFERENCES, catalog(undefined, authoritative)),
+      ).toEqual(x);
+      expect(disk.getItem(COMPARISON_PREFERENCES_KEY)).toBe(persisted);
+      expect(store.getState().drafts.B).toEqual(y);
+      expect(store.getState().openDraft("C", env, EMPTY_COMPARISON_PREFERENCES, catalog())).toEqual(
+        y,
+      );
+      expect(createComparisonPreferencesStore(disk).getState().environments[env]).toEqual(y);
+    },
+  );
   it("keeps an explicit empty checked set instead of reseeding it", () => {
     const disk = storage();
     const store = createComparisonPreferencesStore(disk);

@@ -267,6 +267,7 @@ import {
 import {
   useClientSettings,
   useClientSettingsHydrated,
+  getClientSettings,
   useEnvironmentSettings,
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
@@ -7932,6 +7933,16 @@ export default function ChatView(props: ChatViewProps) {
       let startedCount = 0;
       try {
         const attachments = await turnAttachmentsPromise;
+        // Uploads and docking can outlive a catalog update. Validate every captured
+        // target together before clearing the draft or starting any provider.
+        const finalComparisonBlock = comparisonSendBlockReason(
+          multipleTargets.map((target) => target.selection),
+          {
+            ...appAtomRegistry.get(comparisonCatalogAtom(environmentId)),
+            planModeEnabled: getClientSettings().planModeEnabled,
+          },
+        );
+        if (finalComparisonBlock) throw new Error(finalComparisonBlock);
         const fileBlockReason = readLiveAttachmentCapabilities().fileBlockReason;
         if (fileBlockReason !== null) throw new Error(fileBlockReason);
         const context = buildOutgoingMessageContext(

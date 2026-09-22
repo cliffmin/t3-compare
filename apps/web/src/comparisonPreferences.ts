@@ -174,6 +174,7 @@ export function createComparisonPreferencesStore(storage?: Storage) {
       key: string,
       environmentId: EnvironmentId,
       fallback: ComparisonPreferences,
+      catalog?: ComparisonCatalog,
     ) => ComparisonPreferences;
     editDraft: (key: string, environmentId: EnvironmentId, value: ComparisonPreferences) => void;
     reconcile: (key: string, environmentId: EnvironmentId, catalog: ComparisonCatalog) => void;
@@ -192,10 +193,12 @@ export function createComparisonPreferencesStore(storage?: Storage) {
     return {
       environments,
       drafts: {},
-      openDraft: (key, environmentId, fallback) => {
+      openDraft: (key, environmentId, fallback, catalog) => {
         const value = get().drafts[key] ?? get().environments[environmentId] ?? fallback;
-        if (!get().drafts[key]) set((state) => ({ drafts: { ...state.drafts, [key]: value } }));
-        return value;
+        const restored = catalog ? reconcileComparisonPreferences(value, catalog) : value;
+        if (get().drafts[key] !== restored)
+          set((state) => ({ drafts: { ...state.drafts, [key]: restored } }));
+        return restored;
       },
       editDraft: (key, environmentId, value) => {
         const next = { ...get().environments, [environmentId]: value };

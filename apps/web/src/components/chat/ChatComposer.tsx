@@ -5,7 +5,6 @@ import {
   EMPTY_COMPARISON_PREFERENCES,
   checkedComparisonSelections,
   editComparisonPreferences,
-  reconcileComparisonPreferences,
   freezeComparisonSelection,
   validateComparisonSelection,
   comparisonSendBlockReason,
@@ -5054,11 +5053,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     } else {
       const initial = freezeComparisonSelection(selectedModelSelection, comparisonCatalog);
       const fallback = editComparisonPreferences(EMPTY_COMPARISON_PREFERENCES, initial, true);
-      const opened = useComparisonPreferences
+      const restored = useComparisonPreferences
         .getState()
-        .openDraft(comparisonKey, environmentId, fallback);
-      const restored = reconcileComparisonPreferences(opened, comparisonCatalog);
-      useComparisonPreferences.getState().editDraft(comparisonKey, environmentId, restored);
+        .openDraft(comparisonKey, environmentId, fallback, comparisonCatalog);
       setMultipleModelSelections(checkedComparisonSelections(restored));
       setIsComposerModelPickerOpen(true);
     }
