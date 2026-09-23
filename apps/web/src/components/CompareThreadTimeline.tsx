@@ -29,7 +29,7 @@ import { expandedImageKey, type ExpandedImagePreview } from "./chat/ExpandedImag
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { assetEnvironment } from "../state/assets";
 import { downloadChatAttachment } from "../attachmentActions";
-import { Button } from "./ui/button";
+import { ScrollToEndButton } from "./chat/ScrollToEndButton";
 
 const noop = () => {};
 
@@ -48,6 +48,11 @@ export function CompareThreadTimeline({
   const settings = useEnvironmentSettings(environmentId);
   const listRef = useRef<LegendListRef | null>(null);
   const [following, setFollowing] = useState(true);
+  const [isAtEnd, setIsAtEnd] = useState(true);
+  const onIsAtEndChange = useCallback((atEnd: boolean) => {
+    setIsAtEnd(atEnd);
+    setFollowing(atEnd);
+  }, []);
   const projectionRef = useRef<TimelineEntriesProjection | null>(null);
   const messages = thread.messages;
   const hiddenUserMessageId =
@@ -153,21 +158,18 @@ export function CompareThreadTimeline({
           onAnchorReady={noop}
           contentInsetEndAdjustment={0}
           liveFollowEnabled={following}
-          onIsAtEndChange={setFollowing}
+          onIsAtEndChange={onIsAtEndChange}
           onManualNavigation={() => setFollowing(false)}
         />
-        {!following ? (
-          <Button
-            className="absolute right-3 bottom-2"
-            size="xs"
-            variant="secondary"
+        {!isAtEnd ? (
+          <ScrollToEndButton
             onClick={() => {
               setFollowing(true);
-              void listRef.current?.scrollToEnd({ animated: false });
+              requestAnimationFrame(() => {
+                void listRef.current?.scrollToEnd({ animated: true });
+              });
             }}
-          >
-            Latest activity
-          </Button>
+          />
         ) : null}
       </div>
       {thread.session?.lastError ? (

@@ -1,3 +1,5 @@
+import { ArrowUpRightIcon, InfoIcon } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverPopup, PopoverTitle } from "./ui/popover";
 import { cn } from "../lib/utils";
 import { scopeThreadRef, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
@@ -54,31 +56,35 @@ export function CompareView({ run }: { run: CompareRun }) {
         className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
         data-comparison-scroll
       >
-        <div className="flex justify-center px-4 py-4" aria-label="Shared comparison prompt">
-          <div className={cn(USER_MESSAGE_BUBBLE_CLASS, "w-fit max-w-[min(100%,48rem)] text-left")}>
-            <CollapsibleUserMessageBody
-              text={run.prompt}
-              renderContextReference={() => null}
-              skills={[]}
-              markdownCwd={undefined}
-            />
+        <div className="grid h-full grid-rows-[auto_minmax(0,1fr)]">
+          <div className="flex justify-center px-4 py-4" aria-label="Shared comparison prompt">
+            <div
+              className={cn(USER_MESSAGE_BUBBLE_CLASS, "w-fit max-w-[min(100%,48rem)] text-left")}
+            >
+              <CollapsibleUserMessageBody
+                text={run.prompt}
+                renderContextReference={() => null}
+                skills={[]}
+                markdownCwd={undefined}
+              />
+            </div>
           </div>
-        </div>
-        <div
-          className="grid min-w-0 gap-px bg-border/70"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 26rem), 1fr))" }}
-          data-comparison-grid
-        >
-          {run.entries.map((entry, index) => (
-            <CompareColumn
-              key={entry.threadId ?? `${entry.instanceId}:${index}`}
-              run={run}
-              entry={entry}
-              provider={
-                providers.find((provider) => provider.instanceId === entry.instanceId) ?? null
-              }
-            />
-          ))}
+          <div
+            className="grid min-h-0 min-w-0 auto-rows-[minmax(24rem,1fr)] gap-px bg-border/70"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 26rem), 1fr))" }}
+            data-comparison-grid
+          >
+            {run.entries.map((entry, index) => (
+              <CompareColumn
+                key={entry.threadId ?? `${entry.instanceId}:${index}`}
+                run={run}
+                entry={entry}
+                provider={
+                  providers.find((provider) => provider.instanceId === entry.instanceId) ?? null
+                }
+              />
+            ))}
+          </div>
         </div>
       </div>
     </SidebarInset>
@@ -96,6 +102,7 @@ function ComparisonHeader({
   const navigate = useNavigate();
   const newThread = useNewThreadHandler();
   const selectedId = run.entries.some((entry) => entry.threadId === targetId) ? targetId : null;
+  const selectedEntry = run.entries.find((entry) => entry.threadId === selectedId);
   const targetRef = useMemo(
     () => (selectedId ? scopeThreadRef(run.environmentId, selectedId) : null),
     [run.environmentId, selectedId],
@@ -117,8 +124,8 @@ function ComparisonHeader({
   };
   const cwd = target?.worktreePath ?? null;
   const workspaceControl = (
-    <label className="flex min-w-0 items-center gap-2 text-xs no-drag">
-      Workspace:
+    <div className="flex min-w-0 items-center gap-2 text-xs no-drag">
+      <span>Workspace:</span>
       <Tooltip>
         <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
           <select
@@ -147,7 +154,31 @@ function ComparisonHeader({
           which providers receive your prompt.
         </TooltipPopup>
       </Tooltip>
-    </label>
+      {target ? (
+        <Popover>
+          <PopoverTrigger
+            render={<Button size="icon-xs" variant="ghost" aria-label="Workspace details" />}
+          >
+            <InfoIcon className="size-3.5" />
+          </PopoverTrigger>
+          <PopoverPopup className="max-w-[min(24rem,calc(100vw-2rem))]" align="end">
+            <PopoverTitle className="text-sm">
+              {selectedEntry?.label ?? selectedEntry?.instanceId ?? "Provider"} workspace
+            </PopoverTitle>
+            <dl className="mt-2 space-y-2 text-xs">
+              <div>
+                <dt className="text-muted-foreground">Branch</dt>
+                <dd className="break-all">{target.branch ?? "No branch"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Path</dt>
+                <dd className="break-all">{cwd ?? "Workspace unavailable"}</dd>
+              </div>
+            </dl>
+          </PopoverPopup>
+        </Popover>
+      ) : null}
+    </div>
   );
   return (
     <WorkspacePageHeader
@@ -235,7 +266,7 @@ function CompareColumn({
   const label = entry.label ?? provider?.displayName ?? entry.instanceId;
   return (
     <section
-      className="flex h-[min(46rem,78dvh)] min-h-96 min-w-0 flex-col overflow-hidden bg-background"
+      className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background"
       aria-label={`${label} comparison`}
       data-comparison-thread={entry.threadId}
     >
@@ -261,6 +292,24 @@ function CompareColumn({
         <span className="shrink-0 text-xs text-muted-foreground">
           {COMPARE_COLUMN_STATUS_LABEL[status]}
         </span>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size="xs"
+                variant="ghost"
+                className="shrink-0"
+                aria-label={`Open ${label} thread to continue`}
+                disabled={!entry.threadId || subscriptionStatus === "deleted"}
+                onClick={openThread}
+              />
+            }
+          >
+            Open thread
+            <ArrowUpRightIcon className="size-4" />
+          </TooltipTrigger>
+          <TooltipPopup>Open {label}'s thread to continue the conversation.</TooltipPopup>
+        </Tooltip>
       </header>
       {entry.startError || entry.launch === "uncertain" ? (
         <p role="status" className="border-b border-border px-3 py-2 text-xs text-amber-600">
@@ -299,17 +348,6 @@ function CompareColumn({
           )}
         </div>
       )}
-      <footer className="flex h-11 shrink-0 items-center justify-between gap-2 border-t border-border/70 px-3">
-        <span className="truncate text-xs text-muted-foreground">{thread?.branch ?? "—"}</span>
-        <Button
-          size="xs"
-          variant="outline"
-          disabled={!entry.threadId || subscriptionStatus === "deleted"}
-          onClick={openThread}
-        >
-          {status === "running" ? "Open thread / stop" : "Open thread"}
-        </Button>
-      </footer>
     </section>
   );
 }

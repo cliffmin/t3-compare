@@ -1,3 +1,4 @@
+import { ScrollToEndButton } from "./chat/ScrollToEndButton";
 import { comparisonSendBlockReason, useComparisonPreferences } from "../comparisonPreferences";
 import { comparisonCatalogAtom } from "../state/comparisonCatalog";
 import { downloadChatAttachment } from "../attachmentActions";
@@ -237,7 +238,6 @@ import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import {
   AlarmClockIcon,
   CheckCircle2Icon,
-  ChevronDownIcon,
   DownloadIcon,
   GitBranchIcon,
   Minimize2Icon,
@@ -10036,25 +10036,13 @@ export default function ChatView(props: ChatViewProps) {
 
               {/* scroll to end pill — shown when user has scrolled away from the live edge */}
               {showScrollToBottom && (
-                <div
-                  className="pointer-events-none absolute left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5"
-                  style={{ bottom: scrollToEndClearance + 4 }}
-                >
-                  <Button
-                    aria-label="Scroll to end"
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      composerRef.current?.restoreAfterTimelineReachedEnd();
-                      scrollToEnd(true);
-                    }}
-                    className="pointer-events-auto gap-1.5 rounded-full px-3 text-muted-foreground hover:text-foreground"
-                    size="xs"
-                    variant="glass"
-                  >
-                    <ChevronDownIcon className="size-3.5" />
-                    Scroll to end
-                  </Button>
-                </div>
+                <ScrollToEndButton
+                  bottom={scrollToEndClearance + 4}
+                  onClick={() => {
+                    composerRef.current?.restoreAfterTimelineReachedEnd();
+                    scrollToEnd(true);
+                  }}
+                />
               )}
             </div>
 
