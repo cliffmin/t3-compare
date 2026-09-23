@@ -244,7 +244,7 @@ export function settleComparisonEntry(runId: string, index: number, entry: Compa
             ...entry,
             ...(existing.label ? { label: existing.label } : {}),
             ...(existing.original ? { original: existing.original } : {}),
-            ...(existing.deleted ? { deleted: true } : {}),
+            ...(existing.deleted ? { deleted: true, threadId: existing.threadId } : {}),
           }
         : existing,
     ),

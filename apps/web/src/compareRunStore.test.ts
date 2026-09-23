@@ -124,7 +124,9 @@ it("late start receipt preserves an already-confirmed native child deletion", as
   api.settleComparisonEntry("one", 0, {
     ...run().entries[0]!,
     launch: "failed",
+    threadId: null,
     startError: "late failure",
   });
   expect(api.readDurableComparison("one")?.entries[0]?.deleted).toBe(true);
+  expect(api.readDurableComparison("one")?.entries[0]?.threadId).toBe("child");
 });
