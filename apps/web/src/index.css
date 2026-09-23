@@ -2222,3 +2222,25 @@ code {
 .composer-tiptap li[data-checked] > div > p {
   margin: 0;
 }
+
+/* Three discrete waiting states; reduced-motion users see a static ellipsis. */
+.comparison-wait-dots {
+  display: inline-block;
+  width: 1.2em;
+  clip-path: inset(0 66% 0 0);
+  animation: comparison-wait 2.4s steps(1) infinite;
+}
+@keyframes comparison-wait {
+  33% {
+    clip-path: inset(0 33% 0 0);
+  }
+  66% {
+    clip-path: inset(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .comparison-wait-dots {
+    animation: none;
+    clip-path: none;
+  }
+}

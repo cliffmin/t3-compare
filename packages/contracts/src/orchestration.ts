@@ -1283,6 +1283,22 @@ const ThreadTurnStartBootstrap = Schema.Struct({
 
 export type ThreadTurnStartBootstrap = typeof ThreadTurnStartBootstrap.Type;
 
+/** Optional optimistic preconditions for an answer-aware native follow-up. */
+export const ComparisonFollowUpContext = Schema.Struct({
+  originalPrompt: Schema.String,
+  expectedTargetMessageId: Schema.NullOr(MessageId),
+  sources: Schema.Array(
+    Schema.Struct({
+      threadId: Schema.NullOr(ThreadId),
+      label: Schema.String,
+      expectedUpdatedAt: Schema.NullOr(IsoDateTime),
+      /** A definitive native detail error, not an unhydrated/offline cache. */
+      unavailable: Schema.optionalKey(Schema.Boolean),
+    }),
+  ),
+});
+export type ComparisonFollowUpContext = typeof ComparisonFollowUpContext.Type;
+
 export const ThreadTurnStartCommand = Schema.Struct({
   type: Schema.Literal("thread.turn.start"),
   commandId: CommandId,
@@ -1302,6 +1318,7 @@ export const ThreadTurnStartCommand = Schema.Struct({
   ),
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  comparisonFollowUp: Schema.optional(ComparisonFollowUpContext),
   createdAt: IsoDateTime,
 });
 
@@ -1322,6 +1339,7 @@ const ClientThreadTurnStartCommand = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  comparisonFollowUp: Schema.optional(ComparisonFollowUpContext),
   createdAt: IsoDateTime,
 });
 

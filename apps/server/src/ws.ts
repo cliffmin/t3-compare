@@ -1050,6 +1050,26 @@ const makeWsRpcLayer = (
         Effect.gen(function* () {
           const bootstrap = command.bootstrap;
           const { bootstrap: _bootstrap, ...finalTurnStartCommand } = command;
+          // An acknowledged native command can be replayed after a lost response
+          // without trying to create its already-existing thread/worktree again.
+          if (command.comparisonFollowUp) {
+            const receipt = yield* orchestrationEngine.hasCommandReceipt(command.commandId).pipe(
+              Effect.mapError(
+                (error) =>
+                  new OrchestrationDispatchCommandError({
+                    message: "Could not check previous follow-up delivery.",
+                    cause: error,
+                  }),
+              ),
+            );
+            if (receipt)
+              return yield* dispatchFromClient(finalTurnStartCommand).pipe(
+                Effect.mapError(
+                  (error) =>
+                    new OrchestrationDispatchCommandError({ message: error.message, cause: error }),
+                ),
+              );
+          }
           let createdThread = false;
           let targetProjectId = bootstrap?.createThread?.projectId;
           let targetProjectCwd = bootstrap?.prepareWorktree?.projectCwd;
@@ -1413,20 +1433,24 @@ const makeWsRpcLayer = (
               // real from here on, so any client (or a reload) sees the message
               // while the worktree is still being prepared. The turn start
               // later references this id instead of re-sending the text.
-              yield* dispatchFromClient({
-                type: "thread.message.user.append",
-                commandId: yield* serverCommandId("bootstrap-thread-message"),
-                threadId: command.threadId,
-                message: {
-                  messageId: command.message.messageId,
-                  text: command.message.text,
-                  attachments: command.message.attachments,
-                  ...(command.message.context !== undefined
-                    ? { context: command.message.context }
-                    : {}),
-                },
-                createdAt: command.createdAt,
-              });
+              // Answer-aware context is frozen by the serialized turn-start decider.
+              // Persisting the unexpanded draft here would bypass that snapshot.
+              if (!command.comparisonFollowUp) {
+                yield* dispatchFromClient({
+                  type: "thread.message.user.append",
+                  commandId: yield* serverCommandId("bootstrap-thread-message"),
+                  threadId: command.threadId,
+                  message: {
+                    messageId: command.message.messageId,
+                    text: command.message.text,
+                    attachments: command.message.attachments,
+                    ...(command.message.context !== undefined
+                      ? { context: command.message.context }
+                      : {}),
+                  },
+                  createdAt: command.createdAt,
+                });
+              }
               if (tracked) {
                 const running = yield* worktreeSetupTracker.get(threadId);
                 if (running) yield* recordWorktreeSetup(running);

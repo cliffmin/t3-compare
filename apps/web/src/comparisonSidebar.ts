@@ -17,6 +17,7 @@ export function comparisonSidebarGroups(
       [
         ...run.entries.map((entry) => entry.threadId),
         ...outputs.map((merge) => merge.threadId),
+        run.followUp?.threadId,
       ].flatMap((id) => (id ? [scopedThreadKey(scopeThreadRef(run.environmentId, id))] : [])),
     );
     const anchor = rows.find((row) => keys.has(row.key) && !claimed.has(row.key));

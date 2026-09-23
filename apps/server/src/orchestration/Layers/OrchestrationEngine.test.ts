@@ -2127,3 +2127,150 @@ describe("OrchestrationEngine", () => {
     await system.dispose();
   });
 });
+
+it("serializes comparison follow-ups and replays their native receipt without a second turn", async () => {
+  const directory = await NodeFSP.mkdtemp(
+    NodePath.join(NodeOS.tmpdir(), "t3-comparison-receipts-"),
+  );
+  const databasePath = NodePath.join(directory, "state.sqlite");
+  let system = await createOrchestrationSystem(databasePath);
+  const projectId = ProjectId.make("comparison-project");
+  const sourceId = ThreadId.make("comparison-source");
+  const targetId = ThreadId.make("comparison-target");
+  const staleTargetId = ThreadId.make("comparison-stale-target");
+  const modelSelection = { instanceId: ProviderInstanceId.make("codex"), model: "test-model" };
+  let serial = 0;
+  const dispatch = (command: OrchestrationCommand) => system.run(system.engine.dispatch(command));
+  const commandId = () => CommandId.make(`comparison-${serial++}`);
+  const turnId = TurnId.make("comparison-turn");
+  const at = (second: number) => `2026-01-01T00:00:0${second}.000Z`;
+  try {
+    await dispatch({
+      type: "project.create",
+      commandId: commandId(),
+      projectId,
+      title: "Comparison",
+      workspaceRoot: "/tmp/comparison-receipts",
+      defaultModelSelection: modelSelection,
+      createdAt: at(0),
+    });
+    for (const threadId of [sourceId, targetId, staleTargetId])
+      await dispatch({
+        type: "thread.create",
+        commandId: commandId(),
+        threadId,
+        projectId,
+        title: threadId,
+        modelSelection,
+        runtimeMode: "approval-required",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdAt: at(0),
+      });
+    await dispatch({
+      type: "thread.turn.start",
+      commandId: commandId(),
+      threadId: sourceId,
+      message: {
+        messageId: MessageId.make("source-question"),
+        role: "user",
+        text: "Original",
+        attachments: [],
+      },
+      runtimeMode: "approval-required",
+      interactionMode: "default",
+      createdAt: at(0),
+    });
+    const session = {
+      threadId: sourceId,
+      providerName: "codex",
+      runtimeMode: "approval-required" as const,
+      activeTurnId: turnId,
+      lastError: null,
+    };
+    await dispatch({
+      type: "thread.session.set",
+      commandId: commandId(),
+      threadId: sourceId,
+      session: { ...session, status: "running", updatedAt: at(1) },
+      createdAt: at(1),
+    });
+    await dispatch({
+      type: "thread.message.assistant.delta",
+      commandId: commandId(),
+      threadId: sourceId,
+      messageId: MessageId.make("source-answer"),
+      turnId,
+      delta: "Actual source answer",
+      createdAt: at(2),
+    });
+    await dispatch({
+      type: "thread.message.assistant.complete",
+      commandId: commandId(),
+      threadId: sourceId,
+      messageId: MessageId.make("source-answer"),
+      turnId,
+      createdAt: at(3),
+    });
+    await dispatch({
+      type: "thread.session.set",
+      commandId: commandId(),
+      threadId: sourceId,
+      session: { ...session, activeTurnId: null, status: "ready", updatedAt: at(4) },
+      createdAt: at(4),
+    });
+    await system.dispose();
+    system = await createOrchestrationSystem(databasePath);
+    const source = Option.getOrThrow(await system.readThread(sourceId));
+    const first: Extract<OrchestrationCommand, { type: "thread.turn.start" }> = {
+      type: "thread.turn.start",
+      commandId: commandId(),
+      threadId: targetId,
+      message: {
+        messageId: MessageId.make("follow-up-a"),
+        role: "user",
+        text: "Explain",
+        attachments: [],
+      },
+      runtimeMode: "approval-required",
+      interactionMode: "default",
+      createdAt: at(5),
+      comparisonFollowUp: {
+        originalPrompt: "Original",
+        expectedTargetMessageId: null,
+        sources: [{ threadId: sourceId, label: "Source", expectedUpdatedAt: source.updatedAt }],
+      },
+    };
+    const race = await Promise.allSettled([
+      dispatch(first),
+      dispatch({
+        ...first,
+        commandId: commandId(),
+        message: { ...first.message, messageId: MessageId.make("follow-up-b") },
+      }),
+    ]);
+    expect(race.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(race.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(await system.run(system.engine.hasCommandReceipt(first.commandId))).toBe(true);
+    expect(await dispatch(first)).toEqual(
+      (race[0] as PromiseFulfilledResult<{ sequence: number }>).value,
+    );
+    const target = Option.getOrThrow(await system.readThread(targetId));
+    expect(target.messages).toHaveLength(1);
+    expect(target.messages[0]?.text).toContain("Actual source answer");
+    await dispatch({
+      type: "thread.meta.update",
+      commandId: commandId(),
+      threadId: sourceId,
+      title: "Changed source",
+    });
+    await expect(
+      dispatch({ ...first, threadId: staleTargetId, commandId: commandId() }),
+    ).rejects.toThrow("changed before sending");
+    expect(Option.getOrThrow(await system.readThread(staleTargetId)).messages).toHaveLength(0);
+  } finally {
+    await system.dispose();
+    await NodeFSP.rm(directory, { recursive: true, force: true });
+  }
+});

@@ -1176,6 +1176,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
 const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(props: {
   compact: boolean;
   comparisonCount?: number | undefined;
+  waitingForSources?: boolean | undefined;
   activeContextWindow: ContextWindowSnapshot | null;
   reserveContextWindowMeter: boolean;
   activeThreadModelDisplayName: string | null;
@@ -1219,6 +1220,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
       <ComposerPrimaryActions
         compact={props.compact}
         comparisonCount={props.comparisonCount}
+        waitingForSources={props.waitingForSources}
         pendingAction={props.pendingAction}
         isRunning={props.isRunning}
         showPlanFollowUpPrompt={props.showPlanFollowUpPrompt}
@@ -1309,6 +1311,10 @@ export interface ChatComposerHandle {
 // --------------------------------------------------------------------------
 
 export interface ChatComposerProps {
+  preserveExactSelection?: boolean;
+  ownsInput?: (() => boolean) | undefined;
+  placeholder?: string | undefined;
+  waitingForSources?: boolean | undefined;
   composerDraftTarget: ScopedThreadRef | DraftId;
   environmentId: EnvironmentId;
   attachmentUploadsCapabilityKnown: boolean;
@@ -1425,7 +1431,7 @@ export interface ChatComposerProps {
   composerImagesRef: React.RefObject<ComposerImageAttachment[]>;
   composerFilesRef: React.RefObject<ComposerFileAttachment[]>;
   composerTerminalContextsRef: React.RefObject<TerminalContextDraft[]>;
-  composerRef: React.RefObject<ChatComposerHandle | null>;
+  composerRef: React.Ref<ChatComposerHandle>;
   onPageScrollKeyDown: (key: "PageUp" | "PageDown") => void;
   onPageScrollKeyUp: (key: string) => void;
   onPageScrollRelease: () => void;
@@ -1475,6 +1481,10 @@ export interface ChatComposerProps {
 
 export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps) {
   const {
+    preserveExactSelection = false,
+    ownsInput,
+    placeholder,
+    waitingForSources,
     composerDraftTarget,
     environmentId,
     attachmentUploadsCapabilityKnown,
@@ -1908,6 +1918,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     selectedProviderEntry?.driverKind ?? requestedDriverKind;
 
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({
+    preserveExactSelection,
     threadRef: composerDraftTarget,
     providers: providerStatuses,
     selectedProvider,
@@ -1925,9 +1936,28 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     () => ({ ...comparisonCatalogState, planModeEnabled: settings.planModeEnabled }),
     [comparisonCatalogState, settings.planModeEnabled],
   );
+  const requestedExactInstance =
+    composerDraft.activeProvider ?? activeThreadModelSelection?.instanceId ?? selectedInstanceId;
+  const exactSelectionAvailability = preserveExactSelection
+    ? validateComparisonSelection(
+        {
+          instanceId: requestedExactInstance,
+          model: selectedModel,
+          ...(composerModelOptions?.[selectedInstanceId]
+            ? { options: composerModelOptions[selectedInstanceId] }
+            : {}),
+        },
+        comparisonCatalog,
+      )
+    : null;
+  const exactSelectionBlock =
+    exactSelectionAvailability && exactSelectionAvailability.status !== "valid"
+      ? exactSelectionAvailability.reason
+      : null;
   const sendDisabledReason =
     comparisonSendBlockReason(multipleModelSelections, comparisonCatalog) ??
     externalSendDisabledReason ??
+    exactSelectionBlock ??
     (multipleModelSelections !== null && multipleModelSelections.length < 2
       ? "Select at least two providers."
       : null) ??
@@ -2196,6 +2226,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       pasteAsTextShortcutUntilRef.current = 0;
     };
     const onDesktopPasteAsText = () => {
+      if (ownsInput && !ownsInput()) return;
       const activeElement = document.activeElement;
       const blocksPasteToFocus =
         activeElement instanceof Element &&
@@ -2217,7 +2248,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("blur", onBlur);
     };
-  }, []);
+  }, [ownsInput]);
 
   // ------------------------------------------------------------------
   // Derived: composer send state
@@ -5316,6 +5347,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   useEffect(() => {
     const handler = (event: globalThis.KeyboardEvent) => {
+      if (ownsInput && !ownsInput()) return;
       const command = resolveShortcutCommand(event, keybindings, {
         context: {
           terminalFocus: getTerminalFocusOwner() !== null,
@@ -5350,6 +5382,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     pendingUserInputs.length,
     projectSelectionRequired,
     stashCurrentPrompt,
+    ownsInput,
     isRevertingCheckpoint,
     terminalOpen,
   ]);
@@ -6112,7 +6145,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         multipleModelSelections: routeKind === "draft" ? multipleModelSelections : null,
         providerAvailable:
           multipleModelSelections !== null ||
-          (!noProviderAvailable && providerSendBlockReason === null),
+          (!noProviderAvailable &&
+            providerSendBlockReason === null &&
+            exactSelectionBlock === null),
         selectedProvider,
         selectedModel,
         selectedProviderModels,
@@ -6162,6 +6197,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       selectedModel,
       selectedModelOptionsForDispatch,
       selectedModelSelection,
+      exactSelectionBlock,
       multipleModelSelections,
       setMultipleModelSelections,
       routeKind,
@@ -6482,7 +6518,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     : prompt.trim() ||
                       (showProviderUnavailable
                         ? "Enable a provider in Settings"
-                        : "Ask anything...")}
+                        : (placeholder ?? "Ask anything..."))}
                 </button>
                 {collapsedComposerImagePreviews}
                 <button
@@ -6990,9 +7026,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                               ? "Choose a project above to start a thread"
                               : showProviderUnavailable
                                 ? "Enable a provider in Settings to send a message"
-                                : phase === "disconnected"
-                                  ? DISCONNECTED_COMPOSER_PLACEHOLDER
-                                  : "Ask anything, @tag files/folders, $use skills, or / for commands"
+                                : (placeholder ??
+                                  (phase === "disconnected"
+                                    ? DISCONNECTED_COMPOSER_PLACEHOLDER
+                                    : "Ask anything, @tag files/folders, $use skills, or / for commands"))
                     }
                     disabled={
                       isConnecting ||
@@ -7010,6 +7047,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     className="absolute bottom-0 right-0 flex items-center justify-end gap-1"
                   >
                     <ComposerPrimaryActions
+                      waitingForSources={waitingForSources}
                       comparisonCount={multipleModelSelections?.length}
                       compact
                       pendingAction={pendingPrimaryAction}
@@ -7075,6 +7113,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }
                   className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
                 >
+                  {waitingForSources ? (
+                    <span role="status" className="text-xs text-muted-foreground whitespace-nowrap">
+                      Waiting for providers
+                      <span className="comparison-wait-dots" aria-hidden="true">
+                        ...
+                      </span>
+                    </span>
+                  ) : null}
                   {showComposerAttachAction ? (
                     <>
                       <input
@@ -7113,6 +7159,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     </>
                   ) : null}
                   <ComposerFooterPrimaryActions
+                    waitingForSources={waitingForSources}
                     comparisonCount={multipleModelSelections?.length}
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
                     activeContextWindow={

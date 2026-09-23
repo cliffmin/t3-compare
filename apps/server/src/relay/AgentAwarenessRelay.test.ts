@@ -514,6 +514,7 @@ describe.sequential("signRelayAgentActivityPublishProof", () => {
           dispatch: () => Effect.succeed({ sequence: 1 }),
           streamDomainEvents: Stream.fromQueue(events),
           subscribeDomainEvents: Effect.succeed(Stream.fromQueue(events)),
+          hasCommandReceipt: () => Effect.succeed(false),
           latestSequence: Effect.succeed(0),
         } satisfies OrchestrationEngineShape;
 
@@ -740,6 +741,7 @@ describe.sequential("signRelayAgentActivityPublishProof", () => {
             dispatch: () => Effect.succeed({ sequence: 1 }),
             streamDomainEvents: Stream.fromQueue(events),
             subscribeDomainEvents: Effect.succeed(Stream.fromQueue(events)),
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(0),
           } satisfies OrchestrationEngineShape),
           Layer.succeed(ProjectionSnapshotQuery, {

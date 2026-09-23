@@ -101,6 +101,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   inlineMessageContext: Schema.optionalKey(Schema.Boolean),
   /** Server rejects required worktrees instead of falling back to the project checkout. */
   requiredWorktreeBootstrap: Schema.optionalKey(Schema.Boolean),
+  /** Server atomically freezes source answers for a native comparison follow-up. */
+  comparisonFollowUp: Schema.optionalKey(Schema.Boolean),
   /** Server understands thread.settle / thread.unsettle commands. Absent on
       pre-settlement servers, so clients treat missing as unsupported and
       never send the commands under version skew. */

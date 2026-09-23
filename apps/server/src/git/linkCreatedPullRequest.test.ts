@@ -89,6 +89,7 @@ const makeDependencies = (
       readEvents: () => Stream.empty,
       dispatch,
       streamDomainEvents: Stream.empty,
+      hasCommandReceipt: () => Effect.succeed(false),
       latestSequence: Effect.succeed(0),
     }),
   );

@@ -1,10 +1,11 @@
+import { comparisonSourceBusy } from "@t3tools/shared/comparisonFollowUp";
 import { ArrowUpRightIcon } from "lucide-react";
 import { cn } from "../lib/utils";
 import { scopeThreadRef, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as Option from "effect/Option";
 import { useEnvironmentThread } from "../state/threads";
 import { markComparisonThreadDeleted } from "../compareRunStore";
@@ -28,13 +29,15 @@ import { ChatHeaderBreadcrumb } from "./chat/ChatHeader";
 import { WorkspacePageHeader } from "./WorkspacePageHeader";
 import { CollapsibleUserMessageBody, USER_MESSAGE_BUBBLE_CLASS } from "./chat/MessagesTimeline";
 import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
-import { CompareThreadTimeline } from "./CompareThreadTimeline";
+import ChatView from "./ChatView";
+import { ComparisonFollowUp } from "./ComparisonFollowUp";
 import ChatMarkdown from "./ChatMarkdown";
 import { Button } from "./ui/button";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "./ui/tooltip";
 import { SidebarInset, SidebarTrigger } from "./ui/sidebar";
 
 export function CompareView({ run }: { run: CompareRun }) {
+  const [activePane, setActivePane] = useState<string>("follow-up");
   const configs = useAtomValue(environmentServerConfigsAtom);
   const settings = useEnvironmentSettings(run.environmentId);
   const providers = useMemo(
@@ -52,7 +55,7 @@ export function CompareView({ run }: { run: CompareRun }) {
         className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
         data-comparison-scroll
       >
-        <div className="grid h-full grid-rows-[auto_minmax(0,1fr)]">
+        <div className="flex min-h-full flex-col">
           <div className="flex justify-center px-4 py-4" aria-label="Shared comparison prompt">
             <div
               className={cn(USER_MESSAGE_BUBBLE_CLASS, "w-fit max-w-[min(100%,48rem)] text-left")}
@@ -66,7 +69,7 @@ export function CompareView({ run }: { run: CompareRun }) {
             </div>
           </div>
           <div
-            className="grid min-h-0 min-w-0 auto-rows-[minmax(24rem,1fr)] gap-px bg-border/70"
+            className="grid min-h-0 min-w-0 auto-rows-[minmax(30rem,65vh)] gap-px bg-border/70"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 26rem), 1fr))" }}
             data-comparison-grid
           >
@@ -74,6 +77,8 @@ export function CompareView({ run }: { run: CompareRun }) {
               <CompareColumn
                 key={entry.threadId ?? `${entry.instanceId}:${index}`}
                 run={run}
+                active={activePane === String(index)}
+                onActivate={() => setActivePane(String(index))}
                 entry={entry}
                 provider={
                   providers.find((provider) => provider.instanceId === entry.instanceId) ?? null
@@ -81,6 +86,11 @@ export function CompareView({ run }: { run: CompareRun }) {
               />
             ))}
           </div>
+          <ComparisonFollowUp
+            run={run}
+            active={activePane === "follow-up"}
+            onActivate={() => setActivePane("follow-up")}
+          />
         </div>
       </div>
     </SidebarInset>
@@ -114,8 +124,12 @@ function CompareColumn({
   run,
   entry,
   provider,
+  active,
+  onActivate,
 }: {
   run: CompareRun;
+  active: boolean;
+  onActivate: () => void;
   entry: CompareRunEntry;
   provider: ProviderInstanceEntry | null;
 }) {
@@ -133,13 +147,18 @@ function CompareColumn({
   }, [subscriptionStatus, run.environmentId, entry.threadId, entry.deleted]);
   const live = useThread(threadRef);
   const thread = entry.deleted || subscriptionStatus === "deleted" ? null : live;
+  const nativeThread = thread;
+  const currentSelection = nativeThread?.modelSelection ?? entry;
   const status =
     entry.threadId === null
       ? "not-started"
       : resolveCompareColumnStatus({
           subscriptionStatus: entry.deleted ? "deleted" : subscriptionStatus,
           unavailable: Option.isSome(detail.error),
-          latestTurnState: thread?.latestTurn?.state ?? null,
+          latestTurnState:
+            nativeThread && comparisonSourceBusy(nativeThread)
+              ? "running"
+              : (thread?.latestTurn?.state ?? null),
           sessionStatus: thread?.session?.status ?? null,
         });
   const openThread = () => {
@@ -169,8 +188,8 @@ function CompareColumn({
           <p className="truncate text-sm font-medium">{label}</p>
           <p className="break-words text-xs text-muted-foreground">
             {comparisonSelectionSummary(
-              entry,
-              provider?.models.find((model) => model.slug === entry.model)?.capabilities
+              currentSelection,
+              provider?.models.find((model) => model.slug === currentSelection.model)?.capabilities
                 ?.optionDescriptors,
             )}
           </p>
@@ -191,7 +210,6 @@ function CompareColumn({
               />
             }
           >
-            Open thread
             <ArrowUpRightIcon className="size-4" />
           </TooltipTrigger>
           <TooltipPopup>Open {label}'s thread to continue the conversation.</TooltipPopup>
@@ -204,11 +222,17 @@ function CompareColumn({
         </p>
       ) : null}
       {thread ? (
-        <CompareThreadTimeline
-          thread={thread}
+        <ChatView
+          routeKind="server"
+          threadId={thread.id}
           environmentId={run.environmentId}
-          onOpenThread={openThread}
-          initialMessageId={entry.initialMessageId}
+          embedded={{
+            active,
+            onActivate,
+            hiddenUserMessageId:
+              entry.initialMessageId ??
+              thread.messages.find((message) => message.role === "user")?.id,
+          }}
         />
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-3">

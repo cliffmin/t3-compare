@@ -242,9 +242,37 @@ const makeOrchestrationEngine = Effect.gen(function* () {
           envelope.command.type === "thread.user-input.dismiss"
             ? yield* projectionSnapshotQuery.getUserInputActivity(envelope.command)
             : Option.none();
+        let decisionReadModel = commandReadModel;
+        if (envelope.command.type === "thread.turn.start" && envelope.command.comparisonFollowUp) {
+          // The ordinary command model deliberately omits history on startup and
+          // caps it in memory. Load only this send's native threads, inside the
+          // serialized queue, so restart/windowing cannot omit answer parts or
+          // race the source/target preconditions. Do not retain these full histories.
+          const ids = new Set([
+            envelope.command.threadId,
+            ...envelope.command.comparisonFollowUp.sources.flatMap((source) =>
+              source.threadId ? [source.threadId] : [],
+            ),
+          ]);
+          const details = yield* Effect.forEach(
+            [...ids],
+            (threadId) => projectionSnapshotQuery.getThreadDetailById(threadId),
+            { concurrency: 4 },
+          );
+          const hydrated = details.flatMap((detail) =>
+            Option.isSome(detail) ? [detail.value] : [],
+          );
+          decisionReadModel = {
+            ...commandReadModel,
+            threads: [
+              ...commandReadModel.threads.filter((thread) => !ids.has(thread.id)),
+              ...hydrated,
+            ],
+          };
+        }
         const eventBase = yield* decideOrchestrationCommand({
           command: envelope.command,
-          readModel: commandReadModel,
+          readModel: decisionReadModel,
           ...(Option.isSome(userInputActivity)
             ? { userInputActivity: userInputActivity.value }
             : {}),
@@ -463,6 +491,8 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     // event sequence (updated on the worker fiber). A plain property read is a
     // consistent, committed value — reassignment of `commandReadModel` is
     // atomic on the single-threaded event loop.
+    hasCommandReceipt: (commandId) =>
+      commandReceiptRepository.getByCommandId({ commandId }).pipe(Effect.map(Option.isSome)),
     latestSequence: Effect.sync(() => commandReadModel.snapshotSequence),
   } satisfies OrchestrationEngineShape;
 });

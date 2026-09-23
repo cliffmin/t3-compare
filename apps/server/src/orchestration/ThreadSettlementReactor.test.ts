@@ -277,6 +277,7 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
       subscribeDomainEvents: PubSub.subscribe(domainEvents).pipe(
         Effect.map((subscription) => Stream.fromSubscription(subscription)),
       ),
+      hasCommandReceipt: () => Effect.succeed(false),
       latestSequence: Effect.succeed(0),
     }),
     Layer.succeed(ServerSettingsService, serverSettings),

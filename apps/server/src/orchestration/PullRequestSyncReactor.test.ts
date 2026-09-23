@@ -224,6 +224,7 @@ const makeHarness = Effect.fn("makePullRequestSyncHarness")(function* (options: 
       subscribeDomainEvents: PubSub.subscribe(events).pipe(
         Effect.map((subscription) => Stream.fromSubscription(subscription)),
       ),
+      hasCommandReceipt: () => Effect.succeed(false),
       latestSequence: Effect.succeed(0),
     }),
     Layer.succeed(ServerActivation, Deferred.await(activation)),

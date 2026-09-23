@@ -120,3 +120,21 @@ it("assigns overlapping native rows once without swallowing the later group's un
   expect(byThread.size).toBe(3);
   expect(groups[1]?.anchorKey).toBe(key("unique"));
 });
+
+it("groups the linked follow-up without making it a comparison source and releases rows when the root is removed", () => {
+  const linked: CompareRun = {
+    ...run,
+    followUp: { threadId: ThreadId.make("follow-up"), draftId: "follow-up-draft" },
+  };
+  const rows = [row("a", "active"), row("follow-up", "active"), row("unrelated", "active")];
+  const grouped = comparisonSidebarGroups([linked], rows);
+  expect([...grouped.groups[0]!.groupedKeys]).toEqual([key("a"), key("follow-up")]);
+  expect(linked.entries.map((entry) => entry.threadId)).toEqual(["a", "b", "c"]);
+  const removed = comparisonSidebarGroups([], rows);
+  expect(removed.byThread.size).toBe(0);
+  expect(rows.flatMap((item) => (item.kind === "thread" ? [item.key] : []))).toEqual([
+    key("a"),
+    key("follow-up"),
+    key("unrelated"),
+  ]);
+});

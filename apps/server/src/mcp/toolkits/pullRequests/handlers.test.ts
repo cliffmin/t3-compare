@@ -158,6 +158,7 @@ const makeHarness = Effect.fn("makePullRequestsToolkitHarness")(function* (
       readEvents: () => Stream.empty,
       dispatch,
       streamDomainEvents: Stream.empty,
+      hasCommandReceipt: () => Effect.succeed(false),
       latestSequence: Effect.succeed(0),
     }),
     Layer.succeed(Crypto.Crypto, testCrypto),

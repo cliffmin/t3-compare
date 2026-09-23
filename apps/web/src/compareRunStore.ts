@@ -8,6 +8,7 @@ import {
   ModelSelection,
   ThreadId,
   CommandId,
+  ClientOrchestrationCommand,
   MessageId,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
@@ -87,6 +88,13 @@ export const CompareRunSchema = Schema.Struct({
   prompt: Schema.String,
   title: Schema.optionalKey(Schema.String),
   collapsed: Schema.optionalKey(Schema.Boolean),
+  followUp: Schema.optionalKey(
+    Schema.Struct({
+      threadId: ThreadId,
+      draftId: Schema.String,
+      pending: Schema.optionalKey(ClientOrchestrationCommand),
+    }),
+  ),
   projectId: Schema.optionalKey(ProjectId),
   entries: Schema.Array(CompareRunEntrySchema),
   merges: Schema.optionalKey(Schema.Array(CompareMergeSchema)),

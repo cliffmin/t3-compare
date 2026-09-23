@@ -914,3 +914,70 @@ describe("resolvePlanAgentHealPatch", () => {
     ).toEqual({ sourceControlWriterModelSelection: healed });
   });
 });
+
+describe("native comparison continuation options", () => {
+  it("keeps the thread instance options when a different draft instance has options", () => {
+    const instanceId = ProviderInstanceId.make("codex_work");
+    const selection = createModelSelection(instanceId, "gpt-5.6-sol", [
+      { id: "reasoning_effort", value: "xhigh" },
+    ]);
+    const result = deriveEffectiveComposerModelState({
+      draft: {
+        activeProvider: instanceId,
+        modelSelectionByProvider: {
+          [ProviderInstanceId.make("codex")]: createModelSelection(
+            ProviderInstanceId.make("codex"),
+            "other-model",
+            [{ id: "reasoning_effort", value: "low" }],
+          ),
+        },
+      },
+      providers: [provider({ instanceId, models: [selection.model] })],
+      selectedProvider: ProviderDriverKind.make("codex"),
+      selectedInstanceId: instanceId,
+      threadModelSelection: selection,
+      projectModelSelection: null,
+      settings: settingsWithProviderInstances(),
+    });
+    expect(result.selectedModel).toBe(selection.model);
+    expect(result.modelOptions?.[instanceId]).toEqual(selection.options);
+  });
+  it("honors a later explicit empty option selection over persisted thread options", () => {
+    const instanceId = ProviderInstanceId.make("codex_work");
+    const result = deriveEffectiveComposerModelState({
+      draft: {
+        activeProvider: instanceId,
+        modelSelectionByProvider: {
+          [instanceId]: createModelSelection(instanceId, "gpt-5.6-sol", []),
+        },
+      },
+      providers: [provider({ instanceId, models: ["gpt-5.6-sol"] })],
+      selectedProvider: ProviderDriverKind.make("codex"),
+      selectedInstanceId: instanceId,
+      threadModelSelection: createModelSelection(instanceId, "gpt-5.6-sol", [
+        { id: "reasoning_effort", value: "high" },
+      ]),
+      projectModelSelection: null,
+      settings: settingsWithProviderInstances(),
+    });
+    expect(result.modelOptions?.[instanceId]).toEqual([]);
+  });
+});
+
+it("retains an unavailable comparison thread model until explicit correction", () => {
+  const instanceId = ProviderInstanceId.make("codex_work");
+  const result = deriveEffectiveComposerModelState({
+    preserveExactSelection: true,
+    draft: null,
+    providers: [provider({ instanceId, models: ["other-model"] })],
+    selectedProvider: ProviderDriverKind.make("codex"),
+    selectedInstanceId: instanceId,
+    threadModelSelection: createModelSelection(instanceId, "missing-model", [
+      { id: "reasoningEffort", value: "high" },
+    ]),
+    projectModelSelection: null,
+    settings: settingsWithProviderInstances(),
+  });
+  expect(result.selectedModel).toBe("missing-model");
+  expect(result.modelOptions?.[instanceId]).toEqual([{ id: "reasoningEffort", value: "high" }]);
+});

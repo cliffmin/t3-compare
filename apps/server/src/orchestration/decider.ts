@@ -1,3 +1,4 @@
+import { comparisonFollowUpBody, comparisonSourceBusy } from "@t3tools/shared/comparisonFollowUp";
 import {
   EventId,
   MAX_SCRIPT_ID_LENGTH,
@@ -1377,6 +1378,45 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      let messageText = command.message.text;
+      if (command.comparisonFollowUp) {
+        const previousMessage = targetThread.messages.findLast(
+          (message) => message.role === "user",
+        );
+        if (
+          (previousMessage?.id ?? null) !== command.comparisonFollowUp.expectedTargetMessageId ||
+          (targetThread.messages.length > 0 && comparisonSourceBusy(targetThread)) ||
+          openRequests(targetThread).size > 0
+        ) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail:
+              "The follow-up conversation changed or is processing. Review it before sending again; your draft is retained.",
+          });
+        }
+        for (const source of command.comparisonFollowUp.sources) {
+          const thread = readModel.threads.find((candidate) => candidate.id === source.threadId);
+          if (thread && !thread.deletedAt && openRequests(thread).size > 0) {
+            return yield* new OrchestrationCommandInvariantError({
+              commandType: command.type,
+              detail: "Waiting for a provider approval or question. Resolve it before sending.",
+            });
+          }
+        }
+        const snapshot = comparisonFollowUpBody({
+          context: command.comparisonFollowUp,
+          instruction: command.message.text,
+          target: targetThread,
+          threads: readModel.threads,
+        });
+        if (snapshot.error !== undefined) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: snapshot.error,
+          });
+        }
+        messageText = snapshot.text;
+      }
       const sourceProposedPlan = command.sourceProposedPlan;
       const sourceThread = sourceProposedPlan
         ? yield* requireThread({
@@ -1423,7 +1463,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
               threadId: command.threadId,
               messageId: command.message.messageId,
               role: "user",
-              text: command.message.text,
+              text: messageText,
               attachments: command.message.attachments,
               ...(command.message.context !== undefined
                 ? { context: command.message.context }

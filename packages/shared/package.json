@@ -346,6 +346,10 @@
     "./gitPatchPath": {
       "types": "./src/gitPatchPath.ts",
       "import": "./src/gitPatchPath.ts"
+    },
+    "./comparisonFollowUp": {
+      "types": "./src/comparisonFollowUp.ts",
+      "import": "./src/comparisonFollowUp.ts"
     }
   },
   "scripts": {

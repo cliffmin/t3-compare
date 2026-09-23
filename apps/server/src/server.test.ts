@@ -986,6 +986,7 @@ const buildAppUnderTest = (options?: {
               }),
             dispatch: () => Effect.succeed({ sequence: 0 }),
             streamDomainEvents: Stream.empty,
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(0),
             ...options?.layers?.orchestrationEngine,
           }),
@@ -8609,6 +8610,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           layers: {
             orchestrationEngine: {
               streamDomainEvents: Stream.fromPubSub(liveEvents),
+              hasCommandReceipt: () => Effect.succeed(false),
               latestSequence: Effect.succeed(3),
               getThreadReplayStats: () =>
                 Effect.succeed({ eventCount: 2, payloadBytes: 200, hasCreateEvent: false }),
@@ -9128,6 +9130,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         yield* buildAppUnderTest({
           layers: {
             orchestrationEngine: {
+              hasCommandReceipt: () => Effect.succeed(false),
               latestSequence: Effect.succeed(100_000),
               getThreadReplayStats: () =>
                 Effect.succeed({
@@ -9218,6 +9221,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         yield* buildAppUnderTest({
           layers: {
             orchestrationEngine: {
+              hasCommandReceipt: () => Effect.succeed(false),
               latestSequence: Effect.sync(() => headSequence),
               streamDomainEvents: Stream.unwrap(
                 Effect.gen(function* () {
@@ -9373,6 +9377,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.sync(() => headSequence),
             streamDomainEvents: Stream.fromPubSub(liveEvents).pipe(
               Stream.ensuring(Deferred.succeed(detached, undefined)),
@@ -9451,6 +9456,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(5),
             getThreadReplayStats: () =>
               Effect.die("An invalid cursor must not start a replay query"),
@@ -9488,6 +9494,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(100_000),
             getThreadReplayStats: () =>
               Effect.succeed({
@@ -9538,6 +9545,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(5),
             getThreadReplayStats: () =>
               Effect.succeed({
@@ -9627,6 +9635,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           yield* buildAppUnderTest({
             layers: {
               orchestrationEngine: {
+                hasCommandReceipt: () => Effect.succeed(false),
                 latestSequence: Effect.succeed(deleted.sequence),
                 getThreadReplayStats: ({ threadId, ...range }) =>
                   store.getAggregateReplayStats({
@@ -9728,6 +9737,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.sync(() => headSequence),
             streamDomainEvents: Stream.fromPubSub(liveEvents),
             getThreadReplayStats: () =>
@@ -9785,6 +9795,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         layers: {
           orchestrationEngine: {
             // Head is far ahead of the client's afterSequence (gap > 1000).
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(100_000),
             readEvents: () =>
               Stream.sync(() => {
@@ -9847,6 +9858,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(5),
             getThreadReplayStats: () =>
               Effect.sync(() => {
@@ -9921,6 +9933,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(5),
             readEvents: () =>
               Stream.sync(() => {
@@ -9994,6 +10007,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(50),
             // A burst of message-sent deltas for the busy thread, plus one
             // thread.created for a different thread, all within one batch.
@@ -10166,6 +10180,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(2),
             // A thread.deleted followed, within the same coalescing window, by a
             // later refetchable event for the same thread. The later event wins
@@ -10222,6 +10237,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(1),
             readEvents: () => Stream.make(event),
           },
@@ -10290,6 +10306,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           orchestrationEngine: {
+            hasCommandReceipt: () => Effect.succeed(false),
             latestSequence: Effect.succeed(2),
             readEvents: () =>
               Stream.fromIterable([
@@ -10584,6 +10601,76 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           dispatchedCommands.map((command) => command.type),
           ["thread.archive"],
         );
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect(
+    "replays an acknowledged comparison bootstrap without recreating its thread or worktree",
+    () =>
+      Effect.gen(function* () {
+        const commands: OrchestrationCommand[] = [];
+        const commandId = CommandId.make("acknowledged-comparison");
+        yield* buildAppUnderTest({
+          layers: {
+            orchestrationEngine: {
+              hasCommandReceipt: (id) => Effect.succeed(id === commandId),
+              dispatch: (command) =>
+                Effect.sync(() => {
+                  commands.push(command);
+                  return { sequence: 42 };
+                }),
+            },
+          },
+        });
+        const wsUrl = yield* getWsServerUrl("/ws");
+        const response = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) =>
+            client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+              type: "thread.turn.start",
+              commandId,
+              threadId: ThreadId.make("comparison-target"),
+              message: {
+                messageId: MessageId.make("same-message"),
+                role: "user",
+                text: "Same follow-up",
+                attachments: [],
+              },
+              modelSelection: defaultModelSelection,
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              comparisonFollowUp: {
+                originalPrompt: "Original",
+                expectedTargetMessageId: null,
+                sources: [],
+              },
+              bootstrap: {
+                createThread: {
+                  projectId: defaultProjectId,
+                  title: "Follow-up",
+                  modelSelection: defaultModelSelection,
+                  runtimeMode: "full-access",
+                  interactionMode: "default",
+                  branch: null,
+                  worktreePath: null,
+                  createdAt: "2026-01-01T00:00:00.000Z",
+                },
+                prepareWorktree: {
+                  projectCwd: "/tmp/project",
+                  baseBranch: "main",
+                  branch: "t3code/comparison",
+                },
+              },
+            }),
+          ),
+        );
+        assert.equal(response.sequence, 42);
+        assert.deepEqual(
+          commands.map((command) => command.type),
+          ["thread.turn.start"],
+        );
+        assert.equal(commands[0]?.commandId, commandId);
+        assert.isFalse("bootstrap" in commands[0]!);
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

@@ -19,6 +19,7 @@ interface PendingActionState {
 interface ComposerPrimaryActionsProps {
   compact: boolean;
   comparisonCount?: number | undefined;
+  waitingForSources?: boolean | undefined;
   pendingAction: PendingActionState | null;
   isRunning: boolean;
   showPlanFollowUpPrompt: boolean;
@@ -60,6 +61,7 @@ const preventPointerFocus: PointerEventHandler<HTMLElement> = (event) => {
 export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   compact,
   comparisonCount,
+  waitingForSources,
   pendingAction,
   isRunning,
   showPlanFollowUpPrompt,
@@ -261,8 +263,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           <StageBackdropButtonArt variant={stageBackdropVariant} />
         </span>
       ) : null}
-      {isConnecting || isSendBusy ? (
-        <Spinner className="size-3.5" aria-hidden="true" />
+      {isConnecting || isSendBusy || waitingForSources ? (
+        <Spinner className="size-3.5 motion-reduce:animate-none" aria-hidden="true" />
       ) : (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
           <path

@@ -97,6 +97,7 @@ const run = (activities: ReadonlyArray<ReturnType<typeof recordedSetup>>) =>
           }),
         streamDomainEvents: Stream.empty,
         subscribeDomainEvents: Effect.succeed(Stream.empty),
+        hasCommandReceipt: () => Effect.succeed(false),
         latestSequence: Effect.succeed(0),
       }),
       Effect.provide(NodeServices.layer),

@@ -1,3 +1,4 @@
+import { comparisonFollowUpPreview } from "@t3tools/shared/comparisonFollowUp";
 import { ArrowUpIcon, ClockIcon } from "lucide-react";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
 import { useRightPanelStore } from "~/rightPanelStore";
@@ -4019,7 +4020,9 @@ export const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBo
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasVisibleBody = props.text.trim().length > 0;
-  const canCollapse = hasVisibleBody && shouldCollapseUserMessage(props.text);
+  const comparisonInstruction = comparisonFollowUpPreview(props.text);
+  const canCollapse =
+    comparisonInstruction !== null || (hasVisibleBody && shouldCollapseUserMessage(props.text));
   const isCollapsed = canCollapse && !expanded;
 
   return (
@@ -4030,9 +4033,9 @@ export const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBo
           data-user-message-body="true"
           data-user-message-collapsed={isCollapsed ? "true" : "false"}
           data-user-message-collapsible={canCollapse ? "true" : "false"}
-          data-user-message-fade={isCollapsed ? "true" : "false"}
+          data-user-message-fade={isCollapsed && comparisonInstruction === null ? "true" : "false"}
           style={
-            isCollapsed
+            isCollapsed && comparisonInstruction === null
               ? {
                   WebkitMaskImage: COLLAPSED_USER_MESSAGE_FADE_MASK,
                   maskImage: COLLAPSED_USER_MESSAGE_FADE_MASK,
@@ -4042,7 +4045,9 @@ export const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBo
         >
           <UserMessageBody
             threadRef={props.threadRef}
-            text={props.text}
+            text={
+              isCollapsed && comparisonInstruction !== null ? comparisonInstruction : props.text
+            }
             renderContextReference={props.renderContextReference}
             skills={props.skills}
             markdownCwd={props.markdownCwd}
@@ -4067,7 +4072,11 @@ export const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBo
               onClick={() => setExpanded((value) => !value)}
               className="-ml-1 h-6 rounded-md px-1.5 text-secondary-label text-xs hover:bg-muted/55 hover:text-message-foreground"
             >
-              {expanded ? "Show less" : "Show full message"}
+              {expanded
+                ? "Show less"
+                : comparisonInstruction !== null
+                  ? "Show source context"
+                  : "Show full message"}
             </Button>
           ) : null}
           {props.footer ? (

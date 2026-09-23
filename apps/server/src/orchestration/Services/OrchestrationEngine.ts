@@ -11,6 +11,7 @@
  * @module OrchestrationEngineService
  */
 import type {
+  CommandId,
   OrchestrationClientOrigin,
   OrchestrationCommand,
   OrchestrationEvent,
@@ -22,6 +23,7 @@ import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 
 import type { OrchestrationDispatchError } from "../Errors.ts";
+import type { OrchestrationCommandReceiptRepositoryError } from "../../persistence/Errors.ts";
 import type { OrchestrationEventStoreError } from "../../persistence/Errors.ts";
 import type { OrchestrationAggregateReplayStats } from "../../persistence/Services/OrchestrationEventStore.ts";
 
@@ -35,6 +37,11 @@ export interface OrchestrationThreadReplayRange {
  * OrchestrationEngineShape - Service API for orchestration command and event flow.
  */
 export interface OrchestrationEngineShape {
+  /** Bootstrap retries consult the native receipt before replaying creation side effects. */
+  readonly hasCommandReceipt: (
+    commandId: CommandId,
+  ) => Effect.Effect<boolean, OrchestrationCommandReceiptRepositoryError>;
+
   /**
    * Replay persisted orchestration events from an exclusive sequence cursor.
    *

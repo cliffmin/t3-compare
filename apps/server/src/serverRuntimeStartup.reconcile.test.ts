@@ -103,6 +103,7 @@ const runReconciliation = (input: {
       dispatch: input.dispatch,
       streamDomainEvents: Stream.empty,
       subscribeDomainEvents: Effect.succeed(Stream.empty),
+      hasCommandReceipt: () => Effect.succeed(false),
       latestSequence: Effect.succeed(0),
     }),
     Effect.provide(
@@ -721,6 +722,7 @@ it.effect("does not fail startup when the live provider session inventory cannot
       dispatch: () => Effect.die("unused"),
       streamDomainEvents: Stream.empty,
       subscribeDomainEvents: Effect.succeed(Stream.empty),
+      hasCommandReceipt: () => Effect.succeed(false),
       latestSequence: Effect.succeed(0),
     }),
     Effect.provide(Layer.mergeAll(NodeServices.layer, ServerSettings.layerTest())),
