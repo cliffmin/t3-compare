@@ -2269,6 +2269,103 @@ it("serializes comparison follow-ups and replays their native receipt without a 
       dispatch({ ...first, threadId: staleTargetId, commandId: commandId() }),
     ).rejects.toThrow("changed before sending");
     expect(Option.getOrThrow(await system.readThread(staleTargetId)).messages).toHaveLength(0);
+    // The pending-start projection must outrank an earlier terminal session,
+    // including after a process restart and with a client clock behind it.
+    for (const status of ["error", "stopped", "interrupted"] as const) {
+      const retrySourceId = ThreadId.make(`retry-source-${status}`);
+      const retryTargetId = ThreadId.make(`retry-target-${status}`);
+      for (const threadId of [retrySourceId, retryTargetId])
+        await dispatch({
+          type: "thread.create",
+          commandId: commandId(),
+          threadId,
+          projectId,
+          title: threadId,
+          modelSelection,
+          runtimeMode: "approval-required",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdAt: at(0),
+        });
+      await dispatch({
+        type: "thread.session.set",
+        commandId: commandId(),
+        threadId: retrySourceId,
+        session: {
+          ...session,
+          threadId: retrySourceId,
+          activeTurnId: null,
+          status,
+          updatedAt: at(4),
+        },
+        createdAt: at(4),
+      });
+      const retryMessageId = MessageId.make(`retry-message-${status}`);
+      await dispatch({
+        ...first,
+        commandId: commandId(),
+        threadId: retrySourceId,
+        comparisonFollowUp: undefined,
+        message: { ...first.message, messageId: retryMessageId },
+        createdAt: at(1),
+      });
+      await system.dispose();
+      system = await createOrchestrationSystem(databasePath);
+      const retrySource = Option.getOrThrow(await system.readThread(retrySourceId));
+      expect(retrySource.pendingTurnStartMessageId).toBe(retryMessageId);
+      const shared = () => ({
+        ...first,
+        commandId: commandId(),
+        threadId: retryTargetId,
+        comparisonFollowUp: {
+          ...first.comparisonFollowUp!,
+          sources: [
+            { threadId: sourceId, label: "Completed", expectedUpdatedAt: "" },
+            { threadId: retrySourceId, label: "Retry", expectedUpdatedAt: "" },
+          ],
+        },
+      });
+      const sendShared = async () => {
+        const command = shared();
+        const good = Option.getOrThrow(await system.readThread(sourceId));
+        const retry = Option.getOrThrow(await system.readThread(retrySourceId));
+        command.comparisonFollowUp.sources[0]!.expectedUpdatedAt = good.updatedAt;
+        command.comparisonFollowUp.sources[1]!.expectedUpdatedAt = retry.updatedAt;
+        return dispatch(command);
+      };
+      await expect(sendShared()).rejects.toThrow("Waiting for providers");
+      const failStart = (requestId: string) =>
+        dispatch({
+          type: "thread.activity.append",
+          commandId: commandId(),
+          threadId: retrySourceId,
+          createdAt: at(5),
+          activity: {
+            id: EventId.make(`failure-${serial}`),
+            kind: "provider.turn.start.failed",
+            tone: "error",
+            summary: "Synthetic start failure",
+            payload: { requestId },
+            turnId: null,
+            createdAt: at(5),
+          },
+        });
+      await failStart("unrelated-request");
+      expect(
+        Option.getOrThrow(await system.readThread(retrySourceId)).pendingTurnStartMessageId,
+      ).toBe(retryMessageId);
+      await expect(sendShared()).rejects.toThrow("Waiting for providers");
+      await failStart(retryMessageId);
+      expect(
+        Option.getOrThrow(await system.readThread(retrySourceId)).pendingTurnStartMessageId,
+      ).toBeNull();
+      await sendShared();
+      const saved = Option.getOrThrow(await system.readThread(retryTargetId));
+      expect(saved.messages).toHaveLength(1);
+      expect(saved.messages[0]!.text).toContain('"status":"missing"');
+      expect(saved.messages[0]!.text).toContain("Actual source answer");
+    }
   } finally {
     await system.dispose();
     await NodeFSP.rm(directory, { recursive: true, force: true });

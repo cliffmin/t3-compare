@@ -64,7 +64,7 @@ function SourceObserver({
   const connected = environment?.connection.phase === "connected";
   useEffect(() => {
     const deleted = entry.deleted || state.status === "deleted";
-    const launching = connected && entry.launch === "pending" && !thread && !deleted;
+    const launching = connected && entry.launch === "pending" && !deleted;
     const missing = connected && !launching && Option.isSome(state.error);
     const requests = thread ? derivePendingRequests(thread.activities) : null;
     onChange(index, {

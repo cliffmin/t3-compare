@@ -1669,3 +1669,77 @@ describe("applyThreadDetailEvent", () => {
     });
   });
 });
+
+it.each(["error", "stopped", "interrupted"] as const)(
+  "tracks accepted starts independently of an old %s session and clears only correlated failure",
+  (status) => {
+    const at = "2026-04-01T01:00:00.000Z";
+    const pendingId = MessageId.make("new-retry");
+    const old: OrchestrationThread = {
+      ...baseThread,
+      pendingTurnStartMessageId: null,
+      session: {
+        threadId: baseThread.id,
+        status,
+        providerName: "codex",
+        runtimeMode: "full-access",
+        activeTurnId: null,
+        lastError: null,
+        updatedAt: at,
+      },
+    };
+    const eventBase = {
+      ...baseEventFields,
+      aggregateKind: "thread" as const,
+      aggregateId: old.id,
+      occurredAt: at,
+      sequence: 1,
+    };
+    const requested = applyThreadDetailEvent(old, {
+      ...eventBase,
+      type: "thread.turn-start-requested",
+      payload: {
+        threadId: old.id,
+        messageId: pendingId,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        createdAt: at,
+      },
+    });
+    if (requested.kind !== "updated") throw new Error("Expected accepted start update");
+    expect(requested.thread.session?.status).toBe(status);
+    expect(requested.thread.pendingTurnStartMessageId).toBe(pendingId);
+    const failed = (requestId: string) =>
+      applyThreadDetailEvent(requested.thread, {
+        ...eventBase,
+        type: "thread.activity-appended",
+        payload: {
+          threadId: old.id,
+          activity: {
+            id: EventId.make("start-failure"),
+            kind: "provider.turn.start.failed",
+            tone: "error",
+            summary: "Start failed",
+            payload: { requestId },
+            turnId: null,
+            createdAt: at,
+          },
+        },
+      });
+    const unrelated = failed("older-request");
+    expect(unrelated.kind === "updated" && unrelated.thread.pendingTurnStartMessageId).toBe(
+      pendingId,
+    );
+    const settled = failed(pendingId);
+    expect(settled.kind === "updated" && settled.thread.pendingTurnStartMessageId).toBeNull();
+    const adopted = applyThreadDetailEvent(requested.thread, {
+      ...eventBase,
+      type: "thread.session-set",
+      payload: {
+        threadId: old.id,
+        session: { ...old.session!, status: "running", activeTurnId: TurnId.make("adopted-turn") },
+      },
+    });
+    expect(adopted.kind === "updated" && adopted.thread.pendingTurnStartMessageId).toBeNull();
+  },
+);

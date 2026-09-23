@@ -36,6 +36,7 @@ export type ComparisonSourceThread = Pick<
   | "updatedAt"
   | "deletedAt"
   | "modelSelection"
+  | "pendingTurnStartMessageId"
   | "latestTurn"
   | "session"
   | "messages"
@@ -44,24 +45,28 @@ export type ComparisonSourceThread = Pick<
 /** A pending native message remains busy even before the provider adopts a turn. */
 export function comparisonSourceBusy(thread: ComparisonSourceThread): boolean {
   if (thread.deletedAt) return false;
+  if (thread.pendingTurnStartMessageId != null) return true;
   if (
     thread.latestTurn?.state === "running" ||
     thread.session?.status === "running" ||
     thread.session?.status === "starting"
   )
     return true;
+  // Null is an authoritative native projection result; undefined is a legacy
+  // snapshot and still needs the conservative message-order checks below.
+  if (thread.pendingTurnStartMessageId === null) return false;
   const user = thread.messages.findLast((message) => message.role === "user");
   if (!user) return thread.latestTurn === null && thread.session?.status !== "error";
+  const lastAnswerIndex = thread.messages.findLastIndex(
+    (message) => message.role === "assistant" && message.turnId === thread.latestTurn?.turnId,
+  );
+  if (lastAnswerIndex >= 0 && thread.messages.lastIndexOf(user) > lastAnswerIndex) return true;
   if (
     thread.session?.status === "error" ||
     thread.session?.status === "interrupted" ||
     thread.session?.status === "stopped"
   )
     return false;
-  const lastAnswerIndex = thread.messages.findLastIndex(
-    (message) => message.role === "assistant" && message.turnId === thread.latestTurn?.turnId,
-  );
-  if (lastAnswerIndex >= 0 && thread.messages.lastIndexOf(user) > lastAnswerIndex) return true;
   return (
     !thread.latestTurn ||
     Date.parse(user.createdAt) >

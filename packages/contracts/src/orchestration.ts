@@ -788,6 +788,8 @@ export const OrchestrationThread = Schema.Struct({
   ),
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
+  // Native accepted start awaiting provider adoption. Absence is an older snapshot.
+  pendingTurnStartMessageId: Schema.optional(Schema.NullOr(MessageId)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),

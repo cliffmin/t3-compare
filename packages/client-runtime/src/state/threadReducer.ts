@@ -342,6 +342,17 @@ export function applyThreadDetailEvent(
         kind: "updated",
         thread: {
           ...thread,
+          pendingTurnStartMessageId:
+            thread.pendingTurnStartMessageId &&
+            thread.messages.some(
+              (message) =>
+                message.id === thread.pendingTurnStartMessageId &&
+                message.role === "user" &&
+                (message.attachments?.length ?? 0) === 0 &&
+                message.text.trim().toLowerCase() === "/compact",
+            )
+              ? thread.pendingTurnStartMessageId
+              : event.payload.messageId,
           ...(event.payload.modelSelection !== undefined
             ? { modelSelection: event.payload.modelSelection }
             : {}),
@@ -518,6 +529,16 @@ export function applyThreadDetailEvent(
         kind: "updated",
         thread: {
           ...thread,
+          pendingTurnStartMessageId:
+            (event.payload.session.status === "running" &&
+              event.payload.session.activeTurnId !== null) ||
+            event.payload.session.status === "error" ||
+            event.payload.session.status === "stopped" ||
+            event.payload.session.status === "interrupted" ||
+            (event.payload.session.status === "ready" &&
+              event.commandId?.startsWith("server:provider-session-set:") === true)
+              ? null
+              : thread.pendingTurnStartMessageId,
           session: event.payload.session,
           latestTurn,
           updatedAt: event.occurredAt,
@@ -643,6 +664,7 @@ export function applyThreadDetailEvent(
         kind: "updated",
         thread: {
           ...thread,
+          pendingTurnStartMessageId: null,
           checkpoints,
           messages,
           proposedPlans,
@@ -668,6 +690,15 @@ export function applyThreadDetailEvent(
     // ── Activities ──────────────────────────────────────────────────
     case "thread.activity-appended": {
       const activity = event.payload.activity;
+      const pendingTurnStartMessageId =
+        (activity.kind === "provider.turn.start.failed" ||
+          activity.kind === "context-compaction") &&
+        activity.payload !== null &&
+        typeof activity.payload === "object" &&
+        "requestId" in activity.payload &&
+        activity.payload.requestId === thread.pendingTurnStartMessageId
+          ? null
+          : thread.pendingTurnStartMessageId;
       // A resolvable context-window update supersedes earlier resolvable ones
       // for the same turn: consumers only read the latest value (walking the
       // array backwards), and providers stream these updates continuously, so
@@ -698,6 +729,7 @@ export function applyThreadDetailEvent(
           thread: {
             ...thread,
             activities,
+            pendingTurnStartMessageId,
             updatedAt: event.occurredAt,
           },
         };
@@ -720,7 +752,7 @@ export function applyThreadDetailEvent(
 
       return {
         kind: "updated",
-        thread: { ...thread, activities, updatedAt: event.occurredAt },
+        thread: { ...thread, activities, pendingTurnStartMessageId, updatedAt: event.occurredAt },
       };
     }
 

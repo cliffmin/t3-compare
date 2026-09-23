@@ -634,7 +634,10 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       const threadDetail = yield* snapshotQuery.getThreadDetailById(ThreadId.make("thread-1"));
       assert.equal(threadDetail._tag, "Some");
       if (threadDetail._tag === "Some") {
-        assert.deepEqual(threadDetail.value, snapshot.threads[0]);
+        assert.deepEqual(threadDetail.value, {
+          ...snapshot.threads[0]!,
+          pendingTurnStartMessageId: null,
+        });
       }
 
       const threadShell = yield* snapshotQuery.getThreadShellById(ThreadId.make("thread-1"));

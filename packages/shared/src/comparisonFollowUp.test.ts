@@ -137,6 +137,7 @@ describe("native comparison context", () => {
   it("does not infer completion from an old answer after a failed new request", () => {
     const failed = source({
       id: ThreadId.make("failed"),
+      pendingTurnStartMessageId: null,
       messages: [...source().messages, { ...message("new-request", "user"), createdAt: later }],
       session: {
         threadId: ThreadId.make("failed"),
@@ -219,3 +220,26 @@ it("marks a definitively unavailable detail missing but still enforces authorita
     ).error,
   ).toContain("Waiting");
 });
+
+it.each(["error", "stopped", "interrupted"] as const)(
+  "keeps accepted retry busy over old %s session until native pending clears",
+  (status) => {
+    const thread = source({
+      pendingTurnStartMessageId: MessageId.make("retry"),
+      messages: [...source().messages, message("retry", "user")],
+      session: {
+        threadId: source().id,
+        status,
+        providerName: "codex",
+        runtimeMode: "approval-required",
+        activeTurnId: null,
+        lastError: null,
+        updatedAt: later,
+      },
+    });
+    expect(comparisonSourceBusy(thread)).toBe(true);
+    expect(body([source({ id: ThreadId.make("other") }), thread]).error).toContain("Waiting");
+    expect(comparisonSourceBusy({ ...thread, pendingTurnStartMessageId: null })).toBe(false);
+    expect(comparisonSourceBusy({ ...thread, pendingTurnStartMessageId: undefined })).toBe(true);
+  },
+);

@@ -3399,6 +3399,17 @@ pending_approval_requests AS (
     );
   });
 
+  const getPendingTurnStartMessage = SqlSchema.findOneOption({
+    Request: ThreadIdLookupInput,
+    Result: Schema.Struct({ messageId: MessageId }),
+    execute: ({ threadId }) => sql`
+      SELECT pending_message_id AS "messageId" FROM projection_turns
+      WHERE thread_id = ${threadId} AND turn_id IS NULL AND state = 'pending'
+        AND pending_message_id IS NOT NULL AND checkpoint_turn_count IS NULL
+      ORDER BY requested_at DESC LIMIT 1
+    `,
+  });
+
   const getThreadDetailByIdBounded = (
     threadId: ThreadId,
     bounds: ThreadDetailBounds | undefined,
@@ -3465,6 +3476,7 @@ pending_approval_requests AS (
         checkpointRows,
         latestTurnRow,
         sessionRow,
+        pendingTurnStart,
       ] = yield* Effect.all([
         getActiveThreadRowById({ threadId }).pipe(
           Effect.mapError(
@@ -3526,6 +3538,14 @@ pending_approval_requests AS (
             ),
           ),
         ),
+        getPendingTurnStartMessage({ threadId }).pipe(
+          Effect.mapError(
+            toPersistenceSqlOrDecodeError(
+              "ProjectionSnapshotQuery.getThreadDetailById:pendingStart:query",
+              "ProjectionSnapshotQuery.getThreadDetailById:pendingStart:decodeRow",
+            ),
+          ),
+        ),
       ]);
 
       if (Option.isNone(threadRow)) {
@@ -3533,6 +3553,9 @@ pending_approval_requests AS (
       }
 
       const thread = {
+        pendingTurnStartMessageId: Option.isSome(pendingTurnStart)
+          ? pendingTurnStart.value.messageId
+          : null,
         id: threadRow.value.threadId,
         projectId: threadRow.value.projectId,
         title: threadRow.value.title,
