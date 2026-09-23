@@ -4836,7 +4836,7 @@ export default function Sidebar() {
                           onNavigateToDraft={navigateToDraft}
                         />,
                       ];
-                      const { byThread: groupByThread } = comparisonSidebarGroups(
+                      const { groups, byThread: groupByThread } = comparisonSidebarGroups(
                         comparisonRuns,
                         sidebarListItems,
                       );
@@ -4846,32 +4846,28 @@ export default function Sidebar() {
                         const { run } = group;
                         return (
                           <ComparisonGroup key={run.id} run={run} threads={threads}>
-                            {run.entries.map((entry) => {
-                              const key = entry.threadId
-                                ? scopedThreadKey(scopeThreadRef(run.environmentId, entry.threadId))
-                                : null;
-                              if (key && !group.groupedKeys.has(key)) return null;
-                              const item = sidebarListItems.find(
-                                (row) => row.kind === "thread" && row.key === key,
-                              );
-                              const thread = key ? threadByKey.get(key) : undefined;
-                              if (thread && item?.kind === "thread")
-                                return renderThreadRow(thread, item.section);
-                              return entry.threadId === null ? (
+                            {sidebarListItems.flatMap((item) => {
+                              if (item.kind !== "thread" || !group.groupedKeys.has(item.key))
+                                return [];
+                              const thread = threadByKey.get(item.key);
+                              return thread ? [renderThreadRow(thread, item.section)] : [];
+                            })}
+                            {run.entries
+                              .filter((entry) => entry.threadId === null)
+                              .map((entry, index) => (
                                 <li
-                                  key={`${run.id}:${entry.instanceId}`}
+                                  key={`${run.id}:${index}`}
                                   className="px-2 py-2 text-xs text-muted-foreground"
                                 >
-                                  {entry.instanceId} · Failed to start
+                                  {entry.label ?? entry.instanceId} · Failed to start
                                 </li>
-                              ) : null;
-                            })}
+                              ))}
                           </ComparisonGroup>
                         );
                       };
                       for (const run of comparisonRuns) {
+                        if (groups.some((group) => group.run.id === run.id)) continue;
                         if (
-                          !run.automatic ||
                           !run.projectId ||
                           (scopedProjectKeys &&
                             !scopedProjectKeys.has(`${run.environmentId}:${run.projectId}`))
@@ -4894,7 +4890,13 @@ export default function Sidebar() {
                             {run.entries.map((entry, index) => (
                               <li key={index} className="px-2 py-2 text-xs text-muted-foreground">
                                 {entry.instanceId} ·{" "}
-                                {entry.launch === "failed" ? "Failed to start" : "Starting"}
+                                {entry.deleted
+                                  ? "Deleted"
+                                  : entry.launch === "failed"
+                                    ? "Failed to start"
+                                    : entry.launch === "pending"
+                                      ? "Starting"
+                                      : "Thread unavailable"}
                               </li>
                             ))}
                           </ComparisonGroup>,

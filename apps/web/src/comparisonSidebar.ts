@@ -8,6 +8,7 @@ export function comparisonSidebarGroups(
   items: ReadonlyArray<SidebarListItem>,
 ) {
   const rows = items.filter((item) => item.kind === "thread");
+  const claimed = new Set<string>();
   const groups = runs.flatMap((run) => {
     const outputs = (run.merges ?? []).filter(
       (merge) => run.automatic || merge.output !== undefined,
@@ -18,13 +19,16 @@ export function comparisonSidebarGroups(
         ...outputs.map((merge) => merge.threadId),
       ].flatMap((id) => (id ? [scopedThreadKey(scopeThreadRef(run.environmentId, id))] : [])),
     );
-    const anchor = rows.find((row) => keys.has(row.key));
+    const anchor = rows.find((row) => keys.has(row.key) && !claimed.has(row.key));
     if (!anchor) return [];
     const groupedKeys = new Set(
       rows
-        .filter((row) => row.section === anchor.section && keys.has(row.key))
+        .filter(
+          (row) => row.section === anchor.section && keys.has(row.key) && !claimed.has(row.key),
+        )
         .map((row) => row.key),
     );
+    for (const key of groupedKeys) claimed.add(key);
     return [
       {
         run,

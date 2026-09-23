@@ -6,7 +6,10 @@ import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useAtomValue } from "@effect/atom-react";
 import type { ThreadId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import * as Option from "effect/Option";
+import { useEnvironmentThread } from "../state/threads";
+import { markComparisonThreadDeleted } from "../compareRunStore";
 import {
   COMPARE_COLUMN_STATUS_LABEL,
   comparisonFallbackTitle,
@@ -246,13 +249,20 @@ function CompareColumn({
     [run.environmentId, entry.threadId],
   );
   const subscriptionStatus = useThreadStatus(threadRef);
+  const detail = useEnvironmentThread(entry.threadId ? run.environmentId : null, entry.threadId);
+  useEffect(() => {
+    if (subscriptionStatus === "deleted" && entry.threadId && !entry.deleted) {
+      markComparisonThreadDeleted(run.environmentId, entry.threadId);
+    }
+  }, [subscriptionStatus, run.environmentId, entry.threadId, entry.deleted]);
   const live = useThread(threadRef);
-  const thread = subscriptionStatus === "deleted" ? null : live;
+  const thread = entry.deleted || subscriptionStatus === "deleted" ? null : live;
   const status =
     entry.threadId === null
       ? "not-started"
       : resolveCompareColumnStatus({
-          subscriptionStatus,
+          subscriptionStatus: entry.deleted ? "deleted" : subscriptionStatus,
+          unavailable: Option.isSome(detail.error),
           latestTurnState: thread?.latestTurn?.state ?? null,
           sessionStatus: thread?.session?.status ?? null,
         });
@@ -300,7 +310,7 @@ function CompareColumn({
                 variant="ghost"
                 className="shrink-0"
                 aria-label={`Open ${label} thread to continue`}
-                disabled={!entry.threadId || subscriptionStatus === "deleted"}
+                disabled={!entry.threadId || status === "missing"}
                 onClick={openThread}
               />
             }
@@ -329,8 +339,9 @@ function CompareColumn({
           {entry.original ? (
             <>
               <p className="mb-3 text-xs text-muted-foreground">
-                Saved original answer · live thread unavailable. Activity and later history are not
-                included in this snapshot.
+                Saved original answer ·{" "}
+                {status === "missing" ? "thread deleted" : "live thread unavailable"}. Activity and
+                later history are not included in this snapshot.
               </p>
               {entry.original.messages.map((message) => (
                 <ChatMarkdown key={message.id} text={message.text} cwd={undefined} />
@@ -341,9 +352,11 @@ function CompareColumn({
               {entry.startError ??
                 (status === "missing"
                   ? "This thread was deleted."
-                  : entry.launch === "uncertain"
-                    ? "Request delivery is unknown. Open the thread to check; it will not be resent."
-                    : "Waiting for the provider thread…")}
+                  : status === "unavailable"
+                    ? "This thread is unavailable. Reconnect or open the thread to check."
+                    : entry.launch === "uncertain"
+                      ? "Request delivery is unknown. Open the thread to check; it will not be resent."
+                      : "Waiting for the provider thread…")}
             </p>
           )}
         </div>

@@ -121,3 +121,29 @@ describe("compare column pending", () => {
     expect(isCompareColumnPending({ status: "error", answerCount: 0 })).toBe(false);
   });
 });
+
+it("does not turn missing/error/loading data into confirmed deletion", () => {
+  expect(
+    resolveCompareColumnStatus({
+      subscriptionStatus: "empty",
+      latestTurnState: null,
+      sessionStatus: null,
+    }),
+  ).toBe("loading");
+  expect(
+    resolveCompareColumnStatus({
+      subscriptionStatus: "synchronizing",
+      latestTurnState: null,
+      sessionStatus: null,
+      unavailable: true,
+    }),
+  ).toBe("unavailable");
+  expect(
+    resolveCompareColumnStatus({
+      subscriptionStatus: "deleted",
+      latestTurnState: "completed",
+      sessionStatus: null,
+      unavailable: true,
+    }),
+  ).toBe("missing");
+});

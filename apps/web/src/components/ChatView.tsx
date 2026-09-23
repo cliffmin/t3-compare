@@ -309,7 +309,12 @@ import {
   useComposerDraftStore,
   DraftId,
 } from "../composerDraftStore";
-import { newCompareRunId, useCompareRunStore, type CompareRunEntry } from "../compareRunStore";
+import {
+  newCompareRunId,
+  settleComparisonEntry,
+  useCompareRunStore,
+  type CompareRunEntry,
+} from "../compareRunStore";
 import {
   formatTerminalContextLabel,
   type TerminalContextDraft,
@@ -8008,6 +8013,8 @@ export default function ChatView(props: ChatViewProps) {
                   "The previous request may have started. Open its thread to check before sending again.",
                 );
               }
+              // Removing the group never cancels requests already handed to the server.
+              if (!useCompareRunStore.getState().getRun(runId)) return;
               const supportsInlineMessageContext =
                 appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment
                   .capabilities.inlineMessageContext === true;
@@ -8137,19 +8144,7 @@ export default function ChatView(props: ChatViewProps) {
               );
             } finally {
               const entry = attemptedEntries[targetIndex];
-              if (entry)
-                useCompareRunStore.getState().updateRun(runId, (current) => ({
-                  ...current,
-                  entries: current.entries.map((existing, index) =>
-                    index === targetIndex
-                      ? {
-                          ...entry,
-                          ...(existing.label ? { label: existing.label } : {}),
-                          ...(existing.original ? { original: existing.original } : {}),
-                        }
-                      : existing,
-                  ),
-                }));
+              if (entry) settleComparisonEntry(runId, targetIndex, entry);
             }
           }),
         );

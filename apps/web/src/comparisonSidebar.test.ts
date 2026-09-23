@@ -101,3 +101,22 @@ describe("comparison sidebar lifecycle", () => {
     ]);
   });
 });
+
+it("assigns overlapping native rows once without swallowing the later group's unique children", () => {
+  const other = {
+    ...run,
+    id: "overlap",
+    entries: [run.entries[0]!, { ...selection, threadId: ThreadId.make("unique") }],
+    merges: [],
+  };
+  const { groups, byThread } = comparisonSidebarGroups(
+    [run, other],
+    [row("a", "active"), row("merge", "active"), row("unique", "active")],
+  );
+  expect(groups.map((g) => [...g.groupedKeys])).toEqual([
+    [key("a"), key("merge")],
+    [key("unique")],
+  ]);
+  expect(byThread.size).toBe(3);
+  expect(groups[1]?.anchorKey).toBe(key("unique"));
+});

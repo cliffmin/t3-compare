@@ -48,6 +48,7 @@ const CompareRunEntrySchema = Schema.Struct({
   startError: Schema.optionalKey(Schema.String),
   original: Schema.optionalKey(OriginalAnswerSchema),
   launch: Schema.optionalKey(Schema.Literals(["pending", "started", "uncertain", "failed"])),
+  deleted: Schema.optionalKey(Schema.Boolean),
 });
 export type CompareRunEntry = typeof CompareRunEntrySchema.Type;
 
@@ -171,13 +172,16 @@ function readPersistedRuns(): ReadonlyArray<CompareRun> | null {
   }
 }
 
+export type ComparisonSaveResult = "saved" | "session-only" | "failed" | "missing";
+
 interface CompareRunStoreState {
   runs: ReadonlyArray<CompareRun>;
   /** Records a finished fan-out, evicting the oldest run past the cap. */
   recordRun: (run: CompareRun) => void;
   updateRun: (runId: string, update: (run: CompareRun) => CompareRun) => void;
   getRun: (runId: string) => CompareRun | null;
-  removeRun: (runId: string) => void;
+  renameRun: (runId: string, title: string) => ComparisonSaveResult;
+  removeRun: (runId: string) => ComparisonSaveResult;
 }
 
 export const useCompareRunStore = create<CompareRunStoreState>()((set, get) => ({
@@ -204,15 +208,64 @@ export const useCompareRunStore = create<CompareRunStoreState>()((set, get) => (
     set({ runs: nextRuns });
   },
   getRun: (runId) => get().runs.find((candidate) => candidate.id === runId) ?? null,
+  renameRun: (runId, title) => {
+    const trimmed = title.trim();
+    if (!trimmed) return "failed";
+    const currentRuns = readPersistedRuns() ?? get().runs;
+    if (!currentRuns.some((run) => run.id === runId)) return "missing";
+    const nextRuns = currentRuns.map((run) =>
+      run.id === runId ? { ...run, title: trimmed } : run,
+    );
+    if (baseCompareRunStorage && !persistRuns(nextRuns)) return "failed";
+    set({ runs: nextRuns });
+    return baseCompareRunStorage ? "saved" : "session-only";
+  },
   removeRun: (runId) => {
-    const nextRuns = get().runs.filter((candidate) => candidate.id !== runId);
-    persistRuns(nextRuns);
+    const currentRuns = readPersistedRuns() ?? get().runs;
+    if (!currentRuns.some((run) => run.id === runId)) return "missing";
+    const nextRuns = currentRuns.filter((candidate) => candidate.id !== runId);
+    if (baseCompareRunStorage && !persistRuns(nextRuns)) return "failed";
     set(() => ({ runs: nextRuns }));
+    return baseCompareRunStorage ? "saved" : "session-only";
   },
 }));
 
 export function newCompareRunId(): string {
   return `cmp_${randomUUID()}`;
+}
+
+/** Late dispatch receipts update an existing slot, never recreate a removed group. */
+export function settleComparisonEntry(runId: string, index: number, entry: CompareRunEntry) {
+  useCompareRunStore.getState().updateRun(runId, (current) => ({
+    ...current,
+    entries: current.entries.map((existing, slot) =>
+      slot === index
+        ? {
+            ...entry,
+            ...(existing.label ? { label: existing.label } : {}),
+            ...(existing.original ? { original: existing.original } : {}),
+            ...(existing.deleted ? { deleted: true } : {}),
+          }
+        : existing,
+    ),
+  }));
+}
+
+/** Call only after a successful native deletion or an explicit thread.deleted event. */
+export function markComparisonThreadDeleted(environmentId: EnvironmentId, threadId: ThreadId) {
+  for (const run of readPersistedRuns() ?? useCompareRunStore.getState().runs) {
+    if (run.environmentId !== environmentId) continue;
+    useCompareRunStore.getState().updateRun(run.id, (current) =>
+      current.entries.some((entry) => entry.threadId === threadId && !entry.deleted)
+        ? {
+            ...current,
+            entries: current.entries.map((entry) =>
+              entry.threadId === threadId ? { ...entry, deleted: true } : entry,
+            ),
+          }
+        : current,
+    );
+  }
 }
 
 // Grouping remains last-write-wins; the separate locked attempt ledger owns dispatch identity.

@@ -10,6 +10,7 @@ import type { EnvironmentThreadStatus } from "@t3tools/client-runtime/state/thre
 export type CompareColumnStatus =
   | "unverified"
   | "loading"
+  | "unavailable"
   | "running"
   | "completed"
   | "interrupted"
@@ -30,10 +31,12 @@ export type CompareColumnStatus =
  */
 export function resolveCompareColumnStatus(input: {
   subscriptionStatus: EnvironmentThreadStatus;
+  unavailable?: boolean;
   latestTurnState: OrchestrationLatestTurnState | null;
   sessionStatus: OrchestrationSessionStatus | null;
 }): CompareColumnStatus {
   if (input.subscriptionStatus === "deleted") return "missing";
+  if (input.unavailable) return "unavailable";
   if (input.latestTurnState !== null) return input.latestTurnState;
   if (input.sessionStatus === "error") return "error";
   if (input.subscriptionStatus === "empty") return "loading";
@@ -66,6 +69,7 @@ export function isCompareColumnPending(input: {
 export const COMPARE_COLUMN_STATUS_LABEL: Record<CompareColumnStatus, string> = {
   unverified: "Completion unknown",
   loading: "Starting",
+  unavailable: "Unavailable",
   running: "Working",
   completed: "Done",
   interrupted: "Stopped",

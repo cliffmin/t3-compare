@@ -1,3 +1,4 @@
+import { markComparisonThreadDeleted } from "../compareRunStore";
 import {
   parseScopedThreadKey,
   scopeProjectRef,
@@ -323,6 +324,7 @@ export function useThreadActions() {
           input: { threadId: target.threadId },
         });
         if (result._tag === "Success") {
+          markComparisonThreadDeleted(target.environmentId, target.threadId);
           refreshArchivedThreadsForEnvironment(target.environmentId);
         }
         return result;
@@ -413,6 +415,7 @@ export function useThreadActions() {
       if (deleteResult._tag === "Failure") {
         return deleteResult;
       }
+      markComparisonThreadDeleted(threadRef.environmentId, threadRef.threadId);
       refreshArchivedThreadsForEnvironment(threadRef.environmentId);
       releaseComposerDraftUploads(threadRef);
       clearComposerDraftForThread(threadRef);
