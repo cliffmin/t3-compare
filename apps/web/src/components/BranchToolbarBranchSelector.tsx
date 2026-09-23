@@ -79,7 +79,6 @@ export interface BranchToolbarBranchSelectorHandle {
 }
 
 interface BranchToolbarBranchSelectorProps {
-  forceNewWorktree?: boolean;
   ref?: Ref<BranchToolbarBranchSelectorHandle>;
   className?: string;
   environmentId: EnvironmentId;
@@ -100,7 +99,6 @@ function toBranchActionErrorMessage(error: unknown): string {
 }
 
 export function BranchToolbarBranchSelector({
-  forceNewWorktree = false,
   ref,
   className,
   environmentId,
@@ -154,9 +152,7 @@ export function BranchToolbarBranchSelector({
     activeThreadBranchOverride !== undefined
       ? activeThreadBranchOverride
       : (serverThread?.branch ?? draftThread?.branch ?? null);
-  const activeWorktreePath = forceNewWorktree
-    ? null
-    : (serverThread?.worktreePath ?? draftThread?.worktreePath ?? null);
+  const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const branchCwd = activeWorktreePath ?? activeProjectCwd;
   const hasServerThread = serverThread !== null;

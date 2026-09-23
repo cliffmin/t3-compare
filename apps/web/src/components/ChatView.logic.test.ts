@@ -64,6 +64,7 @@ import {
   resolveProactiveTurnDiffAction,
   resolveThreadMetadataUpdateForNextTurn,
   resolveSendEnvMode,
+  getComparisonWorkspaceBlockReason,
   threadShellHasStarted,
   resolveDraftHeroState,
   isPaintOnlyThreadTimeline,
@@ -2557,5 +2558,53 @@ describe("worktree setup visibility", () => {
       ...settledDone,
       sequence: 9,
     });
+  });
+});
+
+describe("comparison workspace eligibility", () => {
+  const draft = {
+    isLocalDraftThread: true,
+    worktreePath: null,
+    requiredWorktreeBootstrap: false,
+  };
+  it("allows Current checkout on older servers without requiring worktree support", () => {
+    expect(getComparisonWorkspaceBlockReason({ ...draft, sendEnvMode: "local" })).toBeNull();
+  });
+  it("preserves native non-Git normalization without demanding worktree support", () => {
+    const sendEnvMode = resolveSendEnvMode({ requestedEnvMode: "worktree", isGitRepo: false });
+    expect(getComparisonWorkspaceBlockReason({ ...draft, sendEnvMode })).toBeNull();
+  });
+  it("allows the exact existing native worktree without preparing a replacement", () => {
+    expect(
+      getComparisonWorkspaceBlockReason({
+        ...draft,
+        sendEnvMode: "worktree",
+        worktreePath: "/project/existing-checkout",
+      }),
+    ).toBeNull();
+  });
+  it("requires server support only when creating fresh isolated worktrees", () => {
+    expect(getComparisonWorkspaceBlockReason({ ...draft, sendEnvMode: "worktree" })).toContain(
+      "Update this server",
+    );
+    expect(
+      getComparisonWorkspaceBlockReason({
+        ...draft,
+        sendEnvMode: "worktree",
+        requiredWorktreeBootstrap: true,
+      }),
+    ).toBeNull();
+  });
+  it("keeps comparisons on new drafts in either workspace mode", () => {
+    for (const sendEnvMode of ["local", "worktree"] as const) {
+      expect(
+        getComparisonWorkspaceBlockReason({
+          ...draft,
+          sendEnvMode,
+          isLocalDraftThread: false,
+          requiredWorktreeBootstrap: true,
+        }),
+      ).toContain("Start a new thread");
+    }
   });
 });

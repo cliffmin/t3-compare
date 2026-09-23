@@ -1,12 +1,10 @@
-import { ArrowUpRightIcon, InfoIcon } from "lucide-react";
-import { Popover, PopoverTrigger, PopoverPopup, PopoverTitle } from "./ui/popover";
+import { ArrowUpRightIcon } from "lucide-react";
 import { cn } from "../lib/utils";
 import { scopeThreadRef, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useAtomValue } from "@effect/atom-react";
-import type { ThreadId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import * as Option from "effect/Option";
 import { useEnvironmentThread } from "../state/threads";
 import { markComparisonThreadDeleted } from "../compareRunStore";
@@ -23,14 +21,10 @@ import {
   deriveProviderInstanceEntries,
   type ProviderInstanceEntry,
 } from "../providerInstances";
-import {
-  environmentServerConfigsAtom,
-  primaryServerAvailableEditorsAtom,
-  primaryServerKeybindingsAtom,
-} from "../state/server";
+import { environmentServerConfigsAtom } from "../state/server";
 import { environmentProjects } from "../state/projects";
 import { useThread, useThreadStatus } from "../state/entities";
-import { ChatHeader, ChatHeaderBreadcrumb } from "./chat/ChatHeader";
+import { ChatHeaderBreadcrumb } from "./chat/ChatHeader";
 import { WorkspacePageHeader } from "./WorkspacePageHeader";
 import { CollapsibleUserMessageBody, USER_MESSAGE_BUBBLE_CLASS } from "./chat/MessagesTimeline";
 import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
@@ -51,10 +45,9 @@ export function CompareView({ run }: { run: CompareRun }) {
       ),
     [configs, run.environmentId, settings],
   );
-  const [targetId, setTargetId] = useState<ThreadId | null>(null);
   return (
     <SidebarInset className="h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-background text-foreground">
-      <ComparisonHeader run={run} targetId={targetId} onTargetChange={setTargetId} />
+      <ComparisonHeader run={run} />
       <div
         className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
         data-comparison-scroll
@@ -93,144 +86,27 @@ export function CompareView({ run }: { run: CompareRun }) {
     </SidebarInset>
   );
 }
-function ComparisonHeader({
-  run,
-  targetId,
-  onTargetChange,
-}: {
-  run: CompareRun;
-  targetId: ThreadId | null;
-  onTargetChange: (id: ThreadId | null) => void;
-}) {
-  const navigate = useNavigate();
+function ComparisonHeader({ run }: { run: CompareRun }) {
   const newThread = useNewThreadHandler();
-  const selectedId = run.entries.some((entry) => entry.threadId === targetId) ? targetId : null;
-  const selectedEntry = run.entries.find((entry) => entry.threadId === selectedId);
-  const targetRef = useMemo(
-    () => (selectedId ? scopeThreadRef(run.environmentId, selectedId) : null),
-    [run.environmentId, selectedId],
-  );
-  const target = useThread(targetRef);
   const projects = useAtomValue(environmentProjects.projectsAtom);
   const project =
     projects.find(
       (project) => project.environmentId === run.environmentId && project.id === run.projectId,
     ) ?? null;
-  const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const editors = useAtomValue(primaryServerAvailableEditorsAtom);
-  const openTarget = () => {
-    if (selectedId)
-      void navigate({
-        to: "/$environmentId/$threadId",
-        params: { environmentId: run.environmentId, threadId: selectedId },
-      });
-  };
-  const cwd = target?.worktreePath ?? null;
-  const workspaceControl = (
-    <div className="flex min-w-0 items-center gap-2 text-xs no-drag">
-      <span>Workspace:</span>
-      <Tooltip>
-        <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
-          <select
-            aria-label="Workspace action target"
-            className="max-w-44 rounded border border-border bg-background p-1.5"
-            value={targetId ?? ""}
-            onChange={(event) =>
-              onTargetChange(
-                run.entries.find((entry) => entry.threadId === event.target.value)?.threadId ??
-                  null,
-              )
-            }
-          >
-            <option value="">Choose provider</option>
-            {run.entries
-              .filter((entry) => entry.threadId)
-              .map((entry) => (
-                <option key={entry.threadId} value={entry.threadId!}>
-                  {entry.label ?? entry.instanceId} · {entry.model}
-                </option>
-              ))}
-          </select>
-        </TooltipTrigger>
-        <TooltipPopup>
-          Choose the provider workspace for Open, Git, and script actions. This does not change
-          which providers receive your prompt.
-        </TooltipPopup>
-      </Tooltip>
-      {target ? (
-        <Popover>
-          <PopoverTrigger
-            render={<Button size="icon-xs" variant="ghost" aria-label="Workspace details" />}
-          >
-            <InfoIcon className="size-3.5" />
-          </PopoverTrigger>
-          <PopoverPopup className="max-w-[min(24rem,calc(100vw-2rem))]" align="end">
-            <PopoverTitle className="text-sm">
-              {selectedEntry?.label ?? selectedEntry?.instanceId ?? "Provider"} workspace
-            </PopoverTitle>
-            <dl className="mt-2 space-y-2 text-xs">
-              <div>
-                <dt className="text-muted-foreground">Branch</dt>
-                <dd className="break-all">{target.branch ?? "No branch"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Path</dt>
-                <dd className="break-all">{cwd ?? "Workspace unavailable"}</dd>
-              </div>
-            </dl>
-          </PopoverPopup>
-        </Popover>
-      ) : null}
-    </div>
-  );
   return (
     <WorkspacePageHeader
       electron={typeof window !== "undefined" && Boolean(window.desktopBridge)}
       className="flex-wrap border-b border-border/70 h-auto min-h-[var(--workspace-topbar-height)] py-2"
     >
       <SidebarTrigger />
-      {target && project && cwd ? (
-        <ChatHeader
-          wrapActions
-          workspaceControl={workspaceControl}
-          activeThreadEnvironmentId={run.environmentId}
-          activeThreadId={target.id}
-          activeThreadTitle={run.title ?? comparisonFallbackTitle(run.prompt)}
-          isServerThread={false}
-          activeProject={project}
-          openInCwd={cwd}
-          gitCwd={cwd}
-          activeProjectScripts={undefined}
-          preferredScriptId={null}
-          keybindings={keybindings}
-          availableEditors={editors}
-          rightPanelOpen={true}
-          onNewThreadInProject={() => {
-            if (project) void newThread(scopeProjectRef(run.environmentId, project.id));
-          }}
-        />
-      ) : (
-        <ChatHeaderBreadcrumb
-          activeProject={project}
-          onNewThreadInProject={() => {
-            if (project) void newThread(scopeProjectRef(run.environmentId, project.id));
-          }}
-        >
-          <h2 className="truncate">{run.title ?? comparisonFallbackTitle(run.prompt)}</h2>
-        </ChatHeaderBreadcrumb>
-      )}
-
-      {!target || !project || !cwd ? workspaceControl : null}
-      {!cwd ? (
-        <span className="text-xs text-muted-foreground">
-          {targetId ? "Workspace unavailable" : "Choose a workspace to enable actions"}
-        </span>
-      ) : (
-        <Button size="xs" variant="outline" onClick={openTarget}>
-          Actions in {run.entries.find((entry) => entry.threadId === targetId)?.label ?? "provider"}{" "}
-          thread
-        </Button>
-      )}
+      <ChatHeaderBreadcrumb
+        activeProject={project}
+        onNewThreadInProject={() => {
+          if (project) void newThread(scopeProjectRef(run.environmentId, project.id));
+        }}
+      >
+        <h2 className="truncate">{run.title ?? comparisonFallbackTitle(run.prompt)}</h2>
+      </ChatHeaderBreadcrumb>
     </WorkspacePageHeader>
   );
 }

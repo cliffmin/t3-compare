@@ -482,6 +482,7 @@ import {
   resolveProactiveTurnDiffAction,
   resolveThreadMetadataUpdateForNextTurn,
   resolveSendEnvMode,
+  getComparisonWorkspaceBlockReason,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
   shouldWriteThreadErrorToCurrentServerThread,
@@ -7333,29 +7334,18 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
     const multipleModelSelections = queuedMessage ? null : sendCtx.multipleModelSelections;
-    if (
-      multipleModelSelections !== null &&
-      serverConfig?.environment.capabilities.requiredWorktreeBootstrap !== true
-    ) {
-      setThreadError(activeThread.id, "Update this server before starting multiple models.");
-      return;
-    }
-    if (
-      multipleModelSelections !== null &&
-      (!isLocalDraftThread ||
-        !isGitRepo ||
-        !activeThreadBranch ||
-        multipleModelSelections.length < 2)
-    ) {
-      toastManager.add(
-        stackedThreadToast({
-          type: "warning",
-          title: "Choose models and a base branch",
-          description:
-            "Multiple models need a new thread in a Git project. Each gets its own worktree.",
-        }),
-      );
-      return;
+    if (multipleModelSelections !== null) {
+      const workspaceBlockReason = getComparisonWorkspaceBlockReason({
+        isLocalDraftThread,
+        sendEnvMode,
+        worktreePath: activeThread.worktreePath,
+        requiredWorktreeBootstrap:
+          serverConfig?.environment.capabilities.requiredWorktreeBootstrap === true,
+      });
+      if (workspaceBlockReason) {
+        setThreadError(activeThread.id, workspaceBlockReason);
+        return;
+      }
     }
     const {
       images: sendContextImages,
@@ -7890,7 +7880,7 @@ export default function ChatView(props: ChatViewProps) {
       return;
     }
     beginLocalDispatch({
-      preparingWorktree: multipleModelSelections !== null || Boolean(baseBranchForWorktree),
+      preparingWorktree: Boolean(baseBranchForWorktree),
       submissionIntent: resolvedSubmissionIntent,
     });
 
@@ -8048,17 +8038,21 @@ export default function ChatView(props: ChatViewProps) {
                       runtimeMode,
                       interactionMode: target.interactionMode,
                       branch: activeThreadBranch,
-                      worktreePath: null,
+                      worktreePath: activeThread.worktreePath,
                       createdAt: messageCreatedAt,
                     },
-                    prepareWorktree: {
-                      projectCwd: activeProject.workspaceRoot,
-                      baseBranch: activeThreadBranch!,
-                      requireWorktree: true,
-                      branch: buildTemporaryWorktreeBranchName(randomHex),
-                      ...(startFromOrigin ? { startFromOrigin: true } : {}),
-                    },
-                    runSetupScript: true,
+                    ...(baseBranchForWorktree
+                      ? {
+                          prepareWorktree: {
+                            projectCwd: activeProject.workspaceRoot,
+                            baseBranch: baseBranchForWorktree,
+                            requireWorktree: true,
+                            branch: buildTemporaryWorktreeBranchName(randomHex),
+                            ...(startFromOrigin ? { startFromOrigin: true } : {}),
+                          },
+                          runSetupScript: true,
+                        }
+                      : {}),
                   },
                   createdAt: messageCreatedAt,
                 },
@@ -9423,7 +9417,6 @@ export default function ChatView(props: ChatViewProps) {
   );
   const onEnvModeChange = useCallback(
     (mode: DraftThreadEnvMode) => {
-      if (multipleModelSelections !== null) return;
       if (canOverrideServerThreadEnvMode) {
         setPendingServerThreadEnvMode(mode);
         scheduleComposerFocus();
@@ -9446,7 +9439,6 @@ export default function ChatView(props: ChatViewProps) {
       composerDraftTarget,
       draftThread?.worktreePath,
       isLocalDraftThread,
-      multipleModelSelections,
       activeProjectSettings.settings.newWorktreesStartFromOrigin,
       setPendingServerThreadEnvMode,
       scheduleComposerFocus,
@@ -10235,7 +10227,6 @@ export default function ChatView(props: ChatViewProps) {
                           {mountComposerContextStrip && (
                             <div className="pointer-events-auto">
                               <BranchToolbar
-                                forceNewWorktree={multipleModelSelections !== null}
                                 ref={branchToolbarRef}
                                 environmentId={activeThread.environmentId}
                                 threadId={activeThread.id}

@@ -835,6 +835,24 @@ export function resolveSendEnvMode(input: {
   return input.isGitRepo ? input.requestedEnvMode : "local";
 }
 
+/** Existing checkouts need no worktree-bootstrap capability, including a selected native worktree. */
+export function getComparisonWorkspaceBlockReason(input: {
+  isLocalDraftThread: boolean;
+  sendEnvMode: DraftThreadEnvMode;
+  worktreePath: string | null;
+  requiredWorktreeBootstrap: boolean;
+}): string | null {
+  if (!input.isLocalDraftThread) return "Start a new thread to compare providers.";
+  if (
+    input.sendEnvMode === "worktree" &&
+    input.worktreePath === null &&
+    !input.requiredWorktreeBootstrap
+  ) {
+    return "Update this server before comparing providers in new worktrees.";
+  }
+  return null;
+}
+
 export function resolveBackgroundDraftWorkspaceOptions(input: {
   envMode: DraftThreadEnvMode;
   branch: string | null;
