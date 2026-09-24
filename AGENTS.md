@@ -95,7 +95,7 @@ server at live state or open live state read-write. Snapshot an approved SQLite 
 read-only with `VACUUM INTO` to a fresh destination; do not overwrite existing test state.
 A plain live file copy is unsafe. Never symlink live data. Copy only explicitly needed
 settings/secrets within the approved scope; data flows into isolation, never back to live state.
-See the existing [fixture reference](.agents/skills/test-t3-app/references/sqlite-fixtures.md).
+
 
 ## Verifying
 
