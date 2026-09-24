@@ -51,47 +51,49 @@ export function CompareView({ run }: { run: CompareRun }) {
   return (
     <SidebarInset className="h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-background text-foreground">
       <ComparisonHeader run={run} />
-      <div
-        className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
-        data-comparison-scroll
-      >
-        <div className="flex min-h-full flex-col">
-          <div className="flex justify-center px-4 py-4" aria-label="Shared comparison prompt">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" data-comparison-layout>
+        <div
+          className="min-h-[12rem] min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
+          data-comparison-scroll
+        >
+          <div className="flex min-h-full flex-col">
+            <div className="flex justify-center px-4 py-4" aria-label="Shared comparison prompt">
+              <div
+                className={cn(USER_MESSAGE_BUBBLE_CLASS, "w-fit max-w-[min(100%,48rem)] text-left")}
+              >
+                <CollapsibleUserMessageBody
+                  text={run.prompt}
+                  renderContextReference={() => null}
+                  skills={[]}
+                  markdownCwd={undefined}
+                />
+              </div>
+            </div>
             <div
-              className={cn(USER_MESSAGE_BUBBLE_CLASS, "w-fit max-w-[min(100%,48rem)] text-left")}
+              className="grid min-h-0 min-w-0 flex-1 auto-rows-[minmax(20rem,1fr)] gap-px bg-border/70"
+              style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 26rem), 1fr))" }}
+              data-comparison-grid
             >
-              <CollapsibleUserMessageBody
-                text={run.prompt}
-                renderContextReference={() => null}
-                skills={[]}
-                markdownCwd={undefined}
-              />
+              {run.entries.map((entry, index) => (
+                <CompareColumn
+                  key={entry.threadId ?? `${entry.instanceId}:${index}`}
+                  run={run}
+                  active={activePane === String(index)}
+                  onActivate={() => setActivePane(String(index))}
+                  entry={entry}
+                  provider={
+                    providers.find((provider) => provider.instanceId === entry.instanceId) ?? null
+                  }
+                />
+              ))}
             </div>
           </div>
-          <div
-            className="grid min-h-0 min-w-0 auto-rows-[minmax(30rem,65vh)] gap-px bg-border/70"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 26rem), 1fr))" }}
-            data-comparison-grid
-          >
-            {run.entries.map((entry, index) => (
-              <CompareColumn
-                key={entry.threadId ?? `${entry.instanceId}:${index}`}
-                run={run}
-                active={activePane === String(index)}
-                onActivate={() => setActivePane(String(index))}
-                entry={entry}
-                provider={
-                  providers.find((provider) => provider.instanceId === entry.instanceId) ?? null
-                }
-              />
-            ))}
-          </div>
-          <ComparisonFollowUp
-            run={run}
-            active={activePane === "follow-up"}
-            onActivate={() => setActivePane("follow-up")}
-          />
         </div>
+        <ComparisonFollowUp
+          run={run}
+          active={activePane === "follow-up"}
+          onActivate={() => setActivePane("follow-up")}
+        />
       </div>
     </SidebarInset>
   );

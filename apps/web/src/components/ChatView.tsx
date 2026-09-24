@@ -10016,7 +10016,20 @@ export default function ChatView(props: ChatViewProps) {
               />
             </div>
             {/* Messages Wrapper */}
-            <div className="relative flex min-h-0 flex-1 flex-col bg-background">
+            <div
+              className={cn(
+                "relative flex min-h-0 flex-col bg-background",
+                embedded?.followUp
+                  ? displayedTimeline.entries.length > 0 ||
+                    isWorking ||
+                    isPreparingWorktree ||
+                    threadDetailLoading ||
+                    hasTimelineTopBanner
+                    ? "h-[clamp(6rem,20dvh,14rem)] shrink-0"
+                    : "hidden"
+                  : "flex-1",
+              )}
+            >
               {/* Messages — LegendList handles virtualization and scrolling internally */}
               <MessagesTimeline
                 hiddenUserMessageId={embedded?.hiddenUserMessageId}
@@ -10125,7 +10138,7 @@ export default function ChatView(props: ChatViewProps) {
               data-chat-composer-overlay="true"
               className={
                 embedded?.followUp
-                  ? "pointer-events-none relative order-first z-20 shrink-0 pt-2"
+                  ? "pointer-events-none relative z-20 shrink-0 pt-2"
                   : isDraftHeroState
                     ? "pointer-events-none absolute inset-0 z-20 flex items-center"
                     : "pointer-events-none absolute inset-x-0 bottom-0 z-20 pt-1.5 sm:pt-2"

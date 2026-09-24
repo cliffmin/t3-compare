@@ -262,24 +262,22 @@ export function ComparisonFollowUp({
             : (preview?.error ?? null));
   return (
     <section
-      className={`flex flex-col border-t border-border bg-background ${shell ? "min-h-[22rem] h-[min(75vh,48rem)]" : "min-h-0"}`}
+      className="flex min-h-0 shrink-0 flex-col border-t border-border bg-background"
       aria-label="Comparison follow-up"
     >
       {run.entries.map((entry, index) => (
         <SourceObserver key={entry.threadId ?? index} run={run} index={index} onChange={onSource} />
       ))}
-      <header className="flex items-center gap-2 px-4 py-2 text-sm font-medium">
-        <span className="flex-1">Follow up</span>
-        {shell ? (
-          <Link
-            to="/$environmentId/$threadId"
-            params={{ environmentId: run.environmentId, threadId }}
-            aria-label="Open follow-up thread"
-          >
-            <ArrowUpRightIcon className="size-4" />
-          </Link>
-        ) : null}
-      </header>
+      {shell && (targetThread?.messages.length ?? 0) > 0 ? (
+        <Link
+          to="/$environmentId/$threadId"
+          params={{ environmentId: run.environmentId, threadId }}
+          className="self-end px-3 pt-2"
+          aria-label="Open follow-up thread"
+        >
+          <ArrowUpRightIcon className="size-4" />
+        </Link>
+      ) : null}
       {pending?.type === "thread.turn.start" ? (
         <button
           type="button"
