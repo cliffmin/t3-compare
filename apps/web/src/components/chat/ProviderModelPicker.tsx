@@ -51,6 +51,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   disabled?: boolean;
   terminalOpen?: boolean;
   open?: boolean;
+  handle?: React.ComponentProps<typeof Popover>["handle"];
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
   /** Aggregate settings can show a neutral value without claiming one provider is selected. */
@@ -200,6 +201,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
 
   return (
     <Popover
+      handle={props.handle}
       open={isMenuOpen}
       onOpenChange={(open) => {
         if (props.disabled) {

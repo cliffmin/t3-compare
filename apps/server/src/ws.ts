@@ -1,4 +1,4 @@
-import { ensureUnreferencedWorktree } from "./git/unreferencedWorktree.ts";
+import { removeUnreferencedWorktree } from "./git/unreferencedWorktree.ts";
 import { generateComparisonTitle } from "./textGeneration/ComparisonTitle.ts";
 import {
   sameUsageLimitCommandCoverage,
@@ -3337,10 +3337,10 @@ const makeWsRpcLayer = (
         [WS_METHODS.vcsRemoveWorktree]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsRemoveWorktree,
-            Effect.gen(function* () {
-              if (input.requireUnreferenced) yield* ensureUnreferencedWorktree(input);
-              return yield* gitWorkflow.removeWorktree(input);
-            }).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            (input.requireUnreferenced
+              ? removeUnreferencedWorktree(input)
+              : gitWorkflow.removeWorktree(input)
+            ).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.vcsCreateRef]: (input) =>

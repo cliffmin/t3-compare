@@ -1,3 +1,4 @@
+import { comparisonDeletionScope } from "../comparisonActions.logic";
 import { useState } from "react";
 import type { CompareRun } from "../compareRunStore";
 import { comparisonActionError, type useComparisonActions } from "../hooks/useComparisonActions";
@@ -47,9 +48,6 @@ export function useComparisonDeleteDialog(
               {cascade
                 ? "This permanently clears conversation history for the linked threads. Running sessions will stop."
                 : "Only the comparison view and grouping will be removed. Conversations, drafts, worktrees and running sessions will be kept."}
-              {cascade && deleteState?.threads.some((thread) => thread.worktreePath)
-                ? ` Up to ${deleteState.cleanupCandidates.length} worktrees may become unused. Worktrees still used by other conversations or projects are retained. Unused worktrees follow native cleanup settings or a separate confirmation.`
-                : ""}
               {deleteState?.uncertain
                 ? " Waiting for send receipts; linked-thread deletion is unavailable until they resolve."
                 : ""}
@@ -68,9 +66,12 @@ export function useComparisonDeleteDialog(
               />
               <span>
                 Also delete {deleteState?.ids.length ?? "all"} linked threads
-                {deleteState?.threads.some((thread) => thread.worktreePath)
-                  ? " and clean up unused worktrees"
-                  : ""}
+                {cascade && deleteState?.threads.some((thread) => thread.worktreePath) ? (
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    Also deletes unused worktrees and their local changes. Worktrees used elsewhere
+                    are kept.
+                  </span>
+                ) : null}
               </span>
             </label>
           }
@@ -82,13 +83,17 @@ export function useComparisonDeleteDialog(
                   setDeleteState(fresh);
                   if (!fresh || fresh.missing.length || fresh.uncertain) return;
                   // New identities need a fresh, reviewable confirmation.
-                  if (fresh.ids.join() !== deleteState?.ids.join()) {
+                  if (
+                    fresh.ids.join() !== deleteState?.ids.join() ||
+                    comparisonDeletionScope(fresh.threads) !==
+                      comparisonDeletionScope(deleteState?.threads ?? [])
+                  ) {
                     setDeleteError(
-                      "Linked membership changed. Review the updated count and confirm again.",
+                      "Linked threads or worktrees changed. Review the updated scope and confirm again.",
                     );
                     return;
                   }
-                  await actions.dispatch("delete");
+                  await actions.dispatch("delete", comparisonDeletionScope(fresh.threads));
                 } else await actions.removeGrouping();
                 setDeleting(false);
               } catch (error) {

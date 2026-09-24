@@ -102,3 +102,10 @@ export function comparisonCleanupCandidatePaths(
       ),
   );
 }
+
+/** Captures identities and checkout paths covered by one aggregate deletion confirmation. */
+export function comparisonDeletionScope(threads: ReadonlyArray<EnvironmentThreadShell>) {
+  return JSON.stringify(
+    threads.map((thread) => [thread.environmentId, thread.id, thread.worktreePath]).sort(),
+  );
+}

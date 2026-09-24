@@ -3,6 +3,7 @@ import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import type { CompareRun } from "./compareRunStore";
 import {
+  comparisonDeletionScope,
   applyComparisonMembers,
   resolveComparisonMembers,
   comparisonCleanupCandidatePaths,
@@ -155,4 +156,18 @@ it("deduplicates cleanup candidates and excludes outside, archived and project-r
   expect(
     comparisonCleanupCandidatePaths(members, [...members, outside], ["/tree/project/nested"]),
   ).toEqual(["/tree/unused"]);
+});
+
+it("invalidates deletion consent when a later shared worktree changes, independent of ordering", () => {
+  const local = [thread("a"), thread("b"), thread("shared")];
+  const linked = [...local.slice(0, 2), { ...thread("shared"), worktreePath: "/fixture/new" }];
+  expect(comparisonDeletionScope(local)).not.toBe(comparisonDeletionScope(linked));
+  expect(comparisonDeletionScope(linked)).toBe(comparisonDeletionScope([...linked].reverse()));
+  expect(comparisonDeletionScope(linked)).not.toBe(comparisonDeletionScope(linked.slice(0, 2)));
+  expect(comparisonDeletionScope(linked)).not.toBe(
+    comparisonDeletionScope([
+      ...linked.slice(0, 2),
+      { ...thread("shared"), worktreePath: "/fixture/replacement" },
+    ]),
+  );
 });

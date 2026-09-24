@@ -21,6 +21,7 @@ import {
   type ComparisonSaveResult,
 } from "../compareRunStore";
 import {
+  comparisonDeletionScope,
   applyComparisonMembers,
   resolveComparisonMembers,
   comparisonCleanupCandidatePaths,
@@ -186,13 +187,17 @@ export function useComparisonActions(runId: string) {
     // Keep the error visible in this session even when quota prevents persisting it.
     useCompareRunStore.getState().updateRun(runId, (run) => ({ ...run, actionError: message }));
   };
-  const execute = (action: string, snoozedUntil?: string) =>
+  const execute = (action: string, snoozedUntil?: string, confirmedScope?: string) =>
     exclusive(async () => {
       const initial = await read();
       if (!initial) return;
       if (initial.missing.length || initial.uncertain)
         throw new Error(
           "Linked threads are unavailable or waiting for send receipts. Reconnect and retry.",
+        );
+      if (action === "delete" && comparisonDeletionScope(initial.threads) !== confirmedScope)
+        throw new Error(
+          "Linked threads or worktrees changed. Review the updated scope and confirm again.",
         );
       const active = initial.threads.filter((thread) => thread.archivedAt === null);
       if (
@@ -237,6 +242,14 @@ export function useComparisonActions(runId: string) {
         read,
         eligible,
         apply: async (thread, successful) => {
+          if (
+            action === "delete" &&
+            thread.worktreePath !==
+              initial.threads.find((item) => item.id === thread.id)?.worktreePath
+          )
+            throw new Error(
+              "A linked worktree changed during deletion. Review remaining threads and retry.",
+            );
           const ref = scopeThreadRef(thread.environmentId, thread.id);
           let archived = false;
           const result =
@@ -268,6 +281,7 @@ export function useComparisonActions(runId: string) {
                                     ),
                                   ),
                                   comparisonThreads: (await read())?.shells ?? [],
+                                  comparisonCleanupConfirmed: true,
                                 })
                               : null;
           if (result && result._tag !== "Success") {
@@ -344,6 +358,7 @@ export function useComparisonActions(runId: string) {
           useCompareRunStore.getState().saveRun(runId, (run) => ({ ...run, actionError: "" })),
         );
       }
+      if (action === "delete" && !incomplete) return;
       toastManager.add({
         type: incomplete ? "warning" : "success",
         title: `Comparison updated (${outcome.successful.size} threads)`,
@@ -512,7 +527,7 @@ export function useComparisonActions(runId: string) {
     );
     return items;
   };
-  const dispatch = async (action: string) => {
+  const dispatch = async (action: string, confirmedScope?: string) => {
     if (action === "project-settings" || action === "filter-by-project") {
       const run = latestRun(runId);
       const key = run ? projectKey(run) : null;
@@ -546,7 +561,7 @@ export function useComparisonActions(runId: string) {
       if (choice) await execute("snooze", choice.snoozedUntil);
       return;
     }
-    await execute(action);
+    await execute(action, undefined, confirmedScope);
   };
   return { busy, read, menu, dispatch, removeGrouping };
 }

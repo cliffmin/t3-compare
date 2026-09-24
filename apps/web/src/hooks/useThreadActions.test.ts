@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   navigateAfterThreadDeletion,
   requestThreadUnpinConfirmation,
+  requestWorktreeCleanupConsent,
   ThreadArchiveBlockedError,
 } from "./useThreadActions";
 import { toastManager } from "../components/ui/toast";
@@ -102,5 +103,61 @@ describe("requestThreadUnpinConfirmation", () => {
     });
 
     expect(result._tag).toBe("Failure");
+  });
+});
+
+describe("confirmed aggregate worktree cleanup", () => {
+  for (const automaticCleanup of [false, true])
+    it(`consumes aggregate consent once with auto cleanup ${automaticCleanup}`, async () => {
+      const confirm = vi.fn(async () => {
+        throw new Error("Second popup is forbidden");
+      });
+      expect(
+        await requestWorktreeCleanupConsent({
+          eligible: true,
+          aggregateConfirmed: true,
+          automaticCleanup,
+          confirm,
+        }),
+      ).toMatchObject({ _tag: "Success", value: true });
+      expect(confirm).not.toHaveBeenCalled();
+      expect(
+        await requestWorktreeCleanupConsent({
+          eligible: false,
+          aggregateConfirmed: true,
+          automaticCleanup,
+          confirm,
+        }),
+      ).toMatchObject({ _tag: "Success", value: false });
+    });
+  it("retains standalone confirmation and auto-cleanup ownership", async () => {
+    const confirm = vi.fn(async () => false);
+    expect(
+      await requestWorktreeCleanupConsent({
+        eligible: true,
+        aggregateConfirmed: false,
+        automaticCleanup: false,
+        confirm,
+      }),
+    ).toMatchObject({ _tag: "Success", value: false });
+    expect(confirm).toHaveBeenCalledTimes(1);
+    confirm.mockResolvedValue(true);
+    expect(
+      await requestWorktreeCleanupConsent({
+        eligible: true,
+        aggregateConfirmed: false,
+        automaticCleanup: false,
+        confirm,
+      }),
+    ).toMatchObject({ _tag: "Success", value: true });
+    expect(
+      await requestWorktreeCleanupConsent({
+        eligible: true,
+        aggregateConfirmed: false,
+        automaticCleanup: true,
+        confirm,
+      }),
+    ).toMatchObject({ _tag: "Success", value: false });
+    expect(confirm).toHaveBeenCalledTimes(2);
   });
 });

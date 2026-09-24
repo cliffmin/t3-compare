@@ -142,6 +142,21 @@ export class ThreadActiveReorderUnsupportedError extends Schema.TaggedError<Thre
   }
 }
 
+/** Aggregate consent is explicit; automatic cleanup is a separate standalone policy. */
+export function requestWorktreeCleanupConsent(input: {
+  eligible: boolean;
+  aggregateConfirmed: boolean;
+  automaticCleanup: boolean;
+  confirm: (() => Promise<boolean>) | null;
+}) {
+  return settlePromise(async () => {
+    if (!input.eligible) return false;
+    if (input.aggregateConfirmed) return true;
+    if (input.automaticCleanup || !input.confirm) return false;
+    return input.confirm();
+  });
+}
+
 export async function requestThreadUnpinConfirmation(input: {
   enabled: boolean;
   title: string;
@@ -321,6 +336,8 @@ export function useThreadActions() {
       opts: {
         deletedThreadKeys?: ReadonlySet<string>;
         comparisonThreads?: ReadonlyArray<EnvironmentThreadShell>;
+        /** The aggregate dialog already disclosed and confirmed linked worktree removal. */
+        comparisonCleanupConfirmed?: boolean;
       } = {},
     ) => {
       const archived = opts.comparisonThreads?.find(
@@ -379,30 +396,31 @@ export function useThreadActions() {
             appAtomRegistry.get(environmentServerConfigsAtom).get(threadRef.environmentId)
               ?.environment.capabilities.guardedWorktreeRemoval === true));
       const localApi = readLocalApi();
-      let shouldDeleteWorktree = false;
       const environmentSettings = appAtomRegistry
         .get(environmentServerConfigsAtom)
         .get(threadRef.environmentId)?.settings;
       const automaticWorktreeCleanup = environmentSettings
         ? resolveWorktreeCleanup(environmentSettings, thread.projectId).worktreeOnDelete
         : false;
-      if (canDeleteWorktree && localApi && !automaticWorktreeCleanup) {
-        const confirmationResult = await settlePromise(() =>
-          localApi.dialogs.confirm(
-            [
-              "This thread is the only one linked to this worktree:",
-              displayWorktreePath ?? orphanedWorktreePath,
-              "",
-              "Delete the worktree too?",
-            ].join("\n"),
-            { variant: "destructive" },
-          ),
-        );
-        if (confirmationResult._tag === "Failure") {
-          return confirmationResult;
-        }
-        shouldDeleteWorktree = confirmationResult.value;
-      }
+      const cleanupConsent = await requestWorktreeCleanupConsent({
+        eligible: canDeleteWorktree,
+        aggregateConfirmed: opts.comparisonCleanupConfirmed === true,
+        automaticCleanup: automaticWorktreeCleanup,
+        confirm: localApi
+          ? () =>
+              localApi.dialogs.confirm(
+                [
+                  "This thread is the only one linked to this worktree:",
+                  displayWorktreePath ?? orphanedWorktreePath,
+                  "",
+                  "Delete the worktree too?",
+                ].join("\n"),
+                { variant: "destructive" },
+              )
+          : null,
+      });
+      if (cleanupConsent._tag === "Failure") return cleanupConsent;
+      const shouldDeleteWorktree = cleanupConsent.value;
 
       if (thread.session && thread.session.status !== "stopped") {
         const stopped = await stopThreadSession({

@@ -10221,6 +10221,9 @@ export default function ChatView(props: ChatViewProps) {
                               serverConfig?.environment.capabilities.requiredWorktreeBootstrap ===
                                 true
                             }
+                            onComparisonEnable={() => {
+                              if (!embedded && isGitRepo && !envLocked) onEnvModeChange("worktree");
+                            }}
                             onMultipleModelSelectionsChange={setMultipleModelSelections}
                             composerRef={embedded ? embeddedComposerRef : composerRef}
                             composerDraftTarget={composerDraftTarget}

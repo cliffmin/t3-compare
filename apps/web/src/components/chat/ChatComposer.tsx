@@ -1,3 +1,4 @@
+import { PopoverCreateHandle, PopoverTrigger } from "../ui/popover";
 import { useAtomValue } from "@effect/atom-react";
 import { getProviderModelCapabilities } from "../../providerModels";
 import {
@@ -1327,6 +1328,7 @@ export interface ChatComposerProps {
   multipleModelSelections: ReadonlyArray<ModelSelection> | null;
   supportsMultipleModels: boolean;
   embeddedComparison?: boolean;
+  onComparisonEnable?: () => void;
   onMultipleModelSelectionsChange: React.Dispatch<
     React.SetStateAction<ReadonlyArray<ModelSelection> | null>
   >;
@@ -2137,6 +2139,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [isComposerFooterCompact, setIsComposerFooterCompact] = useState(false);
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
   const [isComposerModelPickerOpen, setIsComposerModelPickerOpen] = useState(false);
+  const [modelPickerHandle] = useState(() => PopoverCreateHandle());
   const isMobileViewport = useMediaQuery("max-sm");
   const composerFormRef = useRef<HTMLFormElement>(null);
   const {
@@ -5094,6 +5097,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       const restored = useComparisonPreferences
         .getState()
         .openDraft(comparisonKey, environmentId, fallback, comparisonCatalog);
+      props.onComparisonEnable?.();
       setMultipleModelSelections(checkedComparisonSelections(restored));
       setIsComposerModelPickerOpen(true);
     }
@@ -5109,20 +5113,24 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           disabled={isSendBusy}
           onCheckedChange={toggleComparison}
         />
-        <button
+        <PopoverTrigger
+          handle={modelPickerHandle}
           type="button"
           disabled={multipleModelSelections === null || isSendBusy}
           aria-label="Configure comparison providers"
           aria-haspopup="dialog"
           aria-expanded={multipleModelSelections !== null && isComposerModelPickerOpen}
+          onClick={(event) => {
+            event.preventBaseUIHandler();
+            setIsComposerModelPickerOpen((open) => !open);
+          }}
           className={cn(
             "cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
             multipleModelSelections !== null ? "font-bold text-foreground" : "font-normal",
           )}
-          onClick={() => setIsComposerModelPickerOpen(true)}
         >
           Compare
-        </button>
+        </PopoverTrigger>
       </div>
     ) : null;
   const restingBlockDefs = [
@@ -5185,6 +5193,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         />
       ) : null}
       <ProviderModelPicker
+        handle={modelPickerHandle}
         isComposerOwned
         disabled={providerCatalogPending || isSendBusy}
         {...(comparison
