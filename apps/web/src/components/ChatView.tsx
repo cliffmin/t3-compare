@@ -1,3 +1,4 @@
+import { useThreadCompletionVisit } from "../hooks/useThreadCompletionVisit";
 import type { StartThreadTurnInput } from "@t3tools/client-runtime/operations";
 import { ScrollToEndButton } from "./chat/ScrollToEndButton";
 import { comparisonSendBlockReason, useComparisonPreferences } from "../comparisonPreferences";
@@ -2162,20 +2163,16 @@ export default function ChatView(props: ChatViewProps) {
   // exactly the completion the user is looking at: a wake or completion that
   // lands later still gets its signal (markThreadVisited never moves the
   // timestamp backwards).
-  useEffect(() => {
-    const completedAt = serverThread?.latestTurn?.completedAt;
-    if (embedded || !serverThread?.id || !completedAt) return;
-    markThreadVisited(
-      scopedThreadKey(scopeThreadRef(serverThread.environmentId, serverThread.id)),
-      completedAt,
-    );
-  }, [
-    embedded,
-    markThreadVisited,
-    serverThread?.environmentId,
-    serverThread?.id,
+  const comparisonEntryKey = useLocation({
+    select: (location) => location.state.__TSR_key ?? location.pathname,
+  });
+  useThreadCompletionVisit(
+    serverThread?.id
+      ? scopedThreadKey(scopeThreadRef(serverThread.environmentId, serverThread.id))
+      : undefined,
     serverThread?.latestTurn?.completedAt,
-  ]);
+    embedded ? comparisonEntryKey : undefined,
+  );
   useEffect(() => {
     setMountedTerminalThreadKeys((currentThreadIds) => {
       const nextThreadIds = reconcileMountedTerminalThreadIds({
