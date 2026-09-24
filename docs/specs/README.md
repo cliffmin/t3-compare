@@ -18,6 +18,10 @@ and agent scratch outside Git. Review evidence records tested revision, scenario
 checks and limitations; it must not invent human or independent review. Keep the contract
 current when accepted behavior changes. A merged PR records implementation history.
 
+Older specs retain the worktree names and branches used for their original delivery as
+provenance. Those checkouts may no longer exist; use the current repository `main` and the
+planner's current-state handoff for a new assignment.
+
 Builder packaging and assigned delivery work must finish before archival. Preserve the
 handoff, tested revision and package; install/launch the exact verified build within authorized
 scope with data/configuration and rollback preserved. Working-app acceptance remains the
