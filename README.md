@@ -1,142 +1,118 @@
 # T3 Compare
 
-An experimental, independent fork of [T3 Code](https://github.com/pingdotgg/t3code)
-by Cliff Min. Compare answers from connected AI providers, then synthesize selected
-responses with links back to their source passages.
+Send one prompt to multiple AI providers, explore each conversation independently, and ask a
+chosen model to work across their answers. T3 Compare is an independent
+[T3 Code](https://github.com/pingdotgg/t3code) fork focused on comparison workflows.
 
-The fork adds per-provider model/options selection, comparison results, and versioned
-merge answers. T3 supplies the underlying provider adapters, typed WebSocket server,
-event-sourced orchestration, and desktop/web/mobile foundation. Source attribution
-helps inspect an answer; it does not independently verify model claims.
+## What the fork adds
 
-Workflow and UI development is ongoing. Start with the [contribution workflow](CONTRIBUTING.md),
-[comparison guide](docs/user/composer.md), and [development setup](docs/operations/development.md).
-The fork's CI definition is [Fork CI](.github/workflows/fork-ci.yml); a workflow definition
-alone is not evidence of a passing hosted run. Public fork-specific binaries are not yet provided.
-The installation links below install **upstream T3**, not this experimental fork.
+- Choose providers, models and supported options for one shared prompt; inspect independent
+  responses, native activity, approvals and questions in responsive panes.
+- Continue any provider conversation in its pane or full thread. Follow up across the answers
+  with a chosen provider; each shared send uses the latest completed source answers as context.
+- Keep comparison groups, drafts and provider choices on the current client. Pick the native
+  current checkout or separate worktrees without changing provider permissions.
 
-## Upstream T3 Code
+T3 supplies the provider adapters, event-sourced server, typed WebSocket protocol and
+web/desktop/mobile foundation. This fork does not establish which model is correct. Different
+providers may have different tools, permissions, subscriptions and workspace access.
 
-T3 Code is an "agent harness control surface". It enables control of the agents on your machine with a best-in-class mobile app ([iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824), [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)), [web app](https://app.t3.codes) and [Electron-based desktop app](https://t3.codes).
+## Run from source
 
-Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity. If they're set up on your computer, T3 Code can control them.
+This candidate is a **source release**. Public Compare binaries and a hosted demo are not
+provided. Upstream installers, `npx t3`, Homebrew's `t3-code` and the upstream mobile apps do
+not install these comparison changes.
 
-## "Wait, what are you selling me?"
+Use Git, Node.js **24.13.1 or later in the 24.x series**, and [Vite+](https://viteplus.dev/guide/).
+From a checkout of this repository:
 
-Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
-
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
-
-## Installation
-
-> [!WARNING]
-> T3 Code currently supports Codex, Claude, Cursor, Grok Build, OpenCode, and Antigravity. Install and authenticate at least one provider before use:
->
-> - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-> - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
-> - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
-> - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
-> - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
-
-### Command line
-
-```bash
-curl -fsSL https://t3.codes/install.sh | sh
+```sh
+git clone https://github.com/cliffmin/t3-compare.git
+cd t3-compare
+vp install --frozen-lockfile
+T3CODE_TELEMETRY_ENABLED=false vp run dev --home-dir "$PWD/.t3"
 ```
 
-On Windows, in PowerShell:
+Open the local pairing URL printed by the runner; keep its token private. Add a project and
+configure providers in Settings. You can inspect the app without sending a prompt. Real
+requests require your own authenticated provider and use that provider's subscription or quota.
+See [installation and first run](docs/user/install.md) for prerequisites, isolation and limitations,
+or [development](docs/operations/development.md) for checks and local desktop builds.
 
-```powershell
-irm https://t3.codes/install.ps1 | iex
-```
+## A short walkthrough
 
-Then run `t3` to start the server and open the local web app. `t3 service install` keeps it running in the background, `t3 update` moves to a newer release, and `t3 --help` has the full reference.
+These are **actual app captures with synthetic providers**, not a model evaluation. Fixture Alpha
+and Fixture Beta are deterministic local stand-ins for the Codex adapter: both use
+`fixture-model`, medium reasoning, Full access and the same disposable current checkout.
+They return prepared text, execute no tools and make no paid provider requests. This checks
+the workflow; it does not compare real models or their access to tools.
 
-To try it once without installing, run `npx t3@latest` instead.
+1. Send one shared cache-design prompt. Alpha's prepared answer emphasizes memory bounds;
+   Beta's emphasizes freshness.
 
-### Desktop app
+   ![Shared prompt and contrasting synthetic answers](docs/assets/compare-demo/answers.png)
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), or from your favorite package registry:
+2. Ask Alpha what happens when the working set exceeds the bound. Its conversation continues
+   independently while Beta's original answer stays available.
 
-#### Windows (`winget`)
+   ![Alpha follow-up alongside Beta's unchanged answer](docs/assets/compare-demo/follow-up.png)
 
-```bash
-winget install T3Tools.T3Code
-```
+3. Choose a model in the shared composer and ask it to propose a policy from the updated
+   completed answers. Open that conversation as a full native thread to read the response.
+   The captured request contained Alpha's latest follow-up and Beta's original completed answer.
 
-#### macOS (Homebrew)
+   ![Synthetic shared response in its native thread](docs/assets/compare-demo/shared-answer.png)
 
-```bash
-brew install --cask t3-code
-```
+The screenshots show selected states from the same interaction, including scrolling back to
+read earlier answers; they are not a continuous recording. The prepared shared response does
+not prove model reasoning. An owner-written synthesis request uses the shared conversation;
+there is no dedicated synthesis mode, differences view, verified winner or claim-level citation
+interface. See the [comparison guide](docs/user/composer.md#compare-provider-answers).
 
-#### Arch Linux (AUR)
+## Engineering decisions
 
-Stable:
+Cliff defined the product behavior and acceptance criteria, directed AI-assisted implementation,
+and supplied working-app feedback. AI agents implemented and independently reviewed changes;
+that review is not a claim of independent human code review.
 
-```bash
-yay -S t3code-bin
-```
+Two corrections shaped verification. An accepted source retry could still appear terminal until
+its new turn was adopted, enabling a shared send too early. The
+[pending-state correction](https://github.com/cliffmin/t3-compare/commit/5783330c4)
+keeps it pending through adoption, with receipt/restart regression coverage. A pane could also
+have plausible geometry yet fail to consume real scrolling. The
+[scroll correction](https://github.com/cliffmin/t3-compare/commit/955b2188b)
+bounded its height and added a manually invoked real-wheel check. Geometry assertions alone
+were insufficient; the wheel check is not automatic CI. These are reliability observations,
+not measured speedups or model-quality results.
 
-Nightly:
+## Scope and status
 
-```bash
-yay -S t3code-nightly-bin
-```
+The comparison UI targets web and Electron desktop. Local macOS arm64 builds and synthetic
+browser interactions have been exercised; this is not verification of every OS, provider or
+remote connection mode. Native mobile comparison parity is not claimed. Comparison groups and
+preferences are client-local and can be lost when site data is cleared. Shared conversations
+use completed answers; availability and context limits remain visible.
 
-The AUR packaging is maintained in this repository under [`packaging/aur`](./packaging/aur).
+Compare.21 includes saved shared-draft reload repair, native aggregate comparison actions,
+consolidated worktree-deletion consent and refined Compare controls.
+Its macOS arm64 package was locally verified, installed and launched; owner working-app
+acceptance and public-release approval remain pending. No passing hosted CI run is
+claimed by this document. [Roadmap and limits](docs/roadmap.md) ·
+[Fork CI definition](.github/workflows/fork-ci.yml).
 
-## Some notes
+The source retains upstream services, including provider/model metadata, CLI update/triage
+routes and product analytics. The quickstart disables analytics for its server process;
+it does not make all operation offline. Read [inherited services](docs/user/install.md#inherited-services)
+before using upstream remote/update/support integrations.
 
-We are very very early in this project. Expect bugs.
+## Contribute and report
 
-We are (mostly) not accepting contributions yet. Small fixes may be considered. Big features will not be.
+Use this fork's [issues](https://github.com/cliffmin/t3-compare/issues) for fork behavior and
+feature requests once the repository is public. Include the source revision and a sanitized
+reproduction, never credentials, pairing URLs or private conversations. For vulnerabilities,
+read the [security reporting policy](.github/SECURITY.md); private reporting must be enabled
+and verified before publication. [Contributing](CONTRIBUTING.md) explains focused checks and
+AI attribution. [Documentation](docs/README.md) links the inherited architecture and user guides.
 
-## Documentation
-
-Full docs live in [docs/](./docs). There's no docs site yet.
-
-- [Install and first run](./docs/user/install.md)
-- [Permission modes](./docs/user/permission-modes.md)
-- [Keyboard shortcuts](./docs/user/keybindings.md)
-- [Project settings](./docs/user/project-settings.md)
-- [Remote access from a phone or another machine](./docs/user/remote-access.md)
-- [Keeping app and server in sync](./docs/user/updating.md)
-- [Source control integrations](./docs/user/source-control.md)
-- Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
-- [Run T3 Code as a background service](./docs/user/background-service.md)
-
-Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
-
-## If you REALLY want to contribute still.... read this first
-
-### Install `vp`
-
-T3 Code uses Vite+ so you'll need to install the global `vp` command-line tool.
-
-#### macOS / Linux
-
-```bash
-curl -fsSL https://vite.plus | bash
-```
-
-#### Windows
-
-```bash
-irm https://vite.plus/ps1 | iex
-```
-
-Checkout their getting started guide for more information: https://viteplus.dev/guide/
-
-### Install dependencies
-
-```bash
-vp i
-```
-
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before reporting a bug or opening a PR.
-
-Have a feature request? Start an [Ideas discussion](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
-
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
+T3 Code remains the upstream project. Its code and attribution are retained under the
+[MIT license](LICENSE); its adoption and release claims are not claims about this fork.

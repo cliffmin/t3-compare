@@ -1,103 +1,55 @@
-# Install T3 Code
+# Run T3 Compare
 
-T3 Code runs coding agents on your computer and lets you control them from its
-desktop, web, or mobile app. Set up the machine where the agents will work first.
+T3 Compare is an independent T3 Code fork. This candidate is distributed as source;
+public fork binaries and a hosted demonstration are not provided. Upstream installers,
+`npx t3`, Homebrew's `t3-code`, and upstream mobile apps install T3 Code, not this fork.
 
 ## Requirements
 
-You need an installed, authenticated provider before starting a thread. You can
-launch T3 Code and configure providers afterwards.
+Use Git, Node.js 24.13.1 or later in the 24.x series, and
+[Vite+](https://viteplus.dev/guide/). The lockfile selects the package manager version.
+A configured provider is needed to send a prompt, but you can launch the interface first.
+Real provider requests use your own credentials, subscription or quota.
 
-## Command line
+## Source quickstart
 
-```bash
-curl -fsSL https://t3.codes/install.sh | sh
+```sh
+git clone https://github.com/cliffmin/t3-compare.git
+cd t3-compare
+vp install --frozen-lockfile
+T3CODE_TELEMETRY_ENABLED=false vp run dev --home-dir "$PWD/.t3"
 ```
 
-On Windows, in PowerShell:
+The clone URL is the intended publication destination; access remains restricted until the
+owner publishes the candidate. Open the local pairing URL printed by the runner. Its token
+is a credential: do not include it in screenshots or reports. The explicit home directory
+keeps this checkout's data under the ignored `.t3` directory rather than the installed app's
+state. Keep `VITE_HTTP_URL` and `VITE_WS_URL` unset.
 
-```powershell
-irm https://t3.codes/install.ps1 | iex
-```
+Add a Git project and configure the providers you want in Settings. Turn on Compare in the
+composer, select at least two provider configurations, then send a shared prompt. See
+[Compare provider answers](./composer.md#compare-provider-answers).
 
-This puts `t3` in `~/.local/bin`. If your shell reports `command not found`
-afterwards, that directory is not on your `PATH` yet; the installer prints the
-line to add. Set `T3CODE_CHANNEL=nightly` to install the nightly train, or
-`T3CODE_VERSION` to pin an exact version.
+Stop the development command with Ctrl-C. Update a source checkout through Git and reinstall
+from the lockfile; inherited CLI update commands follow upstream distribution channels.
+For development checks and local desktop builds, use the
+[development guide](../operations/development.md). Locally verified macOS arm64 packages use
+ad-hoc signing; that is not notarized distribution or a guarantee about future Keychain prompts.
+Windows, Linux, mobile and remote comparison parity have not been release-verified.
 
-| Task                                             | Command                                                   |
-| ------------------------------------------------ | --------------------------------------------------------- |
-| Start the server and open the web app            | `t3`                                                      |
-| Start the server without a browser               | `t3 serve`                                                |
-| Keep it running in the background (macOS, Linux) | `t3 service install` ([details](./background-service.md)) |
-| Move to the newest release                       | `t3 update`                                               |
-| Remove it again                                  | `t3 uninstall`                                            |
+## Inherited services
 
-Run `t3 --help` for the full reference.
+The fork reuses T3's provider/runtime foundation. Starting locally does not make every
+operation offline. The server's product analytics default to enabled; the command above
+disables them for that process. Other start commands need the same environment variable if
+you want the same setting. See [product usage data](./telemetry.md).
 
-To try T3 Code once without installing it, run `npx t3@latest` instead (needs
-Node.js for `npx`).
-
-### Intel Macs
-
-There is no `t3` executable for Intel Macs (the desktop app is available). To
-run a server there, build it from source with Node.js 24 and `vp`
-([Install vp](https://github.com/pingdotgg/t3code#install-vp)):
-
-```bash
-git clone https://github.com/pingdotgg/t3code
-cd t3code && vp i && vp run build:desktop
-node apps/server/dist/bin.mjs
-```
-
-`t3 update` and the background service do not apply to a server run this way;
-update it with `git pull` and a rebuild.
-
-## Desktop app
-
-Download a release from [GitHub Releases](https://github.com/pingdotgg/t3code/releases),
-or use a package manager:
-
-| Platform           | Install                         |
-| ------------------ | ------------------------------- |
-| Windows            | `winget install T3Tools.T3Code` |
-| macOS              | `brew install --cask t3-code`   |
-| Arch Linux         | `yay -S t3code-bin`             |
-| Arch Linux nightly | `yay -S t3code-nightly-bin`     |
-
-### Windows Subsystem for Linux
-
-Choose a WSL distro in **Settings → Connections** to run agents and projects
-there. Install the provider CLIs inside that distro. T3 Code installs its own
-server runtime there automatically; the first launch after an app update can
-take longer.
-
-### Open a project from a terminal
-
-With the desktop app already running on the same machine:
-
-```bash
-t3 app
-```
-
-This opens a new thread for the current directory, adding the project if needed.
-Pass a path, such as `t3 app ../my-project`, to open another directory. It requires
-the desktop app, so a standalone server or an SSH session is not enough. If the
-command cannot reach the app, start or update the desktop app and try again.
-
-## Mobile app
-
-Install T3 Code from the
-[App Store](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824) or
-[Google Play](https://play.google.com/store/apps/details?id=com.t3tools.t3code).
-The phone connects to a server on another machine. Follow
-[remote access](./remote-access.md) to link it through T3 Connect or a pairing URL.
-
-If the app crashes during launch, open Settings → Diagnostics on the next launch
-that succeeds. It lists startup crashes from the last 7 days with the error and
-component stack that store crash reports leave out. Copy the report and paste it
-into a GitHub issue. Error messages can quote values from the app, so read it over
-before sharing.
+Provider/model metadata can come from upstream, and provider authentication or requests
+connect to their providers. Remote access, T3 Connect, upstream update channels, app stores
+and support links are inherited services, not services operated by this fork. The inherited
+`t3 triage` command prepares upstream reports; do not use it to report fork behavior.
+Use this fork's issue form with sanitized reproduction details instead. Do not send credentials,
+pairing URLs or private conversation history.
 
 ## Providers
 
@@ -138,8 +90,7 @@ For provider-specific setup and accounts, see [Codex](./providers-codex.md),
 
 ## Next steps
 
-- [Working with threads](./thread-sidebar.md): start tasks and organize parallel work.
-- [Permission modes](./permission-modes.md): choose when agents ask before acting.
-- [Remote access](./remote-access.md): connect from another device.
-- [Running in the background](./background-service.md): keep a Linux or macOS host available.
-- [Updating T3 Code](./updating.md): update the app and connected servers.
+- [Compare and follow up](./composer.md#compare-provider-answers).
+- [Working with threads](./thread-sidebar.md) and [permission modes](./permission-modes.md).
+- [Scope and limits](../roadmap.md).
+- [Upstream T3 Code](https://github.com/pingdotgg/t3code) for upstream installation and services.

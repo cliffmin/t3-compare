@@ -14,49 +14,57 @@ to keep a large paste editable in the composer instead.
 
 ## Compare provider answers
 
-On web and desktop, start a new thread in a Git project and turn on **Compare** beside the access control. The composer is tinted while comparison mode is active. In the
-model picker, check the providers to include. Click a provider icon to choose
-its model and effort or other supported options. Each provider has its own
-configuration; the footer in the model picker summarizes the submitted choices.
-These choices do not change Settings → Providers.
+On web and desktop, start a new thread in a project and turn on **Compare**. Click the Compare
+label to open or close configuration; the switch turns Compare on or off. Select at least two ready providers, then each model and its
+supported options. Send one prompt to see independent native responses, activity, approvals and
+questions. Panes wrap when the window is too narrow to fit them side by side.
 
-Select at least two ready providers, then send your prompt once. Answers appear
-side by side with the submitted model and options. Each runs in its own worktree.
-Use **Open thread** to continue an answer, stop it, or handle an approval.
+Enabling Compare defaults to **New worktree** where native Git/worktree support is available. You can
+then change the native **Current checkout / New worktree** choice; reopening configuration preserves
+your selection. Current checkout gives the selected
+providers the same files; it is not a read-only mode. New worktree creates separate worktrees
+through native preparation. Branch and project eligibility follow the normal composer; there
+is no separate repository-free comparison flow. Permissions remain whatever you selected.
 
-Turn **Compare** off to return to normal mode without changing the prompt or
-your normal model settings. Toggling back on restores the comparison choices
-while this draft stays open. It does not stop comparisons already running.
-Expand a comparison in the sidebar to reopen its provider conversations. Sessions
-in another pinned, snoozed, or settled section keep their existing locations. The
-parent opens the original answers; continuing a provider conversation does not
-replace them. The merged-answer child shows progress and then the number of answers
-actually included. Groups and saved outputs are stored on this client, so they
-are not shared across devices and can be lost when site data is cleared.
+Provider/model/options choices are remembered per environment on this client without changing
+ordinary single-provider defaults. Submitted settings remain associated with the run. Unavailable
+models or options require explicit correction; the app does not silently choose replacements.
 
-### Merge the answers
+Continue each source conversation using its inline composer, or open its full thread. The shared
+composer starts a separate conversation with your chosen provider. At each shared send it includes
+the original prompt and the latest completed answer from each source as labeled reference material.
+Your instruction remains the request; asking for a synthesis is an ordinary shared follow-up.
 
-Before sending, choose the merger's provider, model, and supported options under
-**Merge answer** inside the comparison picker. Additional direction is optional
-and applies to this prompt. The merger selection is remembered for future comparisons.
+Shared send waits while sources are running or need an approval/answer. Once sources are terminal,
+it can use available completed answers and shows missing-source information. A later failed or
+stopped turn may leave an earlier completed answer available, labeled accordingly. It cannot send
+with no completed answers. Context-size errors require correction; answers are not silently
+truncated. Later shared sends refresh their context without rewriting earlier snapshots.
 
-Once all original providers finish or fail, the app automatically combines successful,
-nonempty answers. At least two included answers are required. Failed or stopped answers
-remain available to read but are excluded. You can exclude completed answers while others
-are still running; the inputs lock when the merge starts. Continuing a provider conversation
-does not change those original inputs or silently start another merge.
+Unfocused source and shared composers collapse while preserving draft text and controls. Focus
+one to edit its full draft. Answers follow new output at the live edge; scrolling up lets you read
+history, and **Scroll to end** resumes following. Reload preserves saved drafts and configuration.
 
-Open the merged-answer child in the sidebar to read the result. Provider labels link to
-recorded source passages; they show where an idea came from, not independent verification.
-Use **Copy answer** to take the result to another agent, or **Open thread** to continue,
-handle an approval, investigate an error, or stop generation. A failed merge offers an
-explicit retry. Uncertain delivery requires inspecting its thread rather than blindly
-sending again. Oversized inputs are rejected instead of silently shortened.
+Turn Compare off to return to ordinary mode; this does not stop existing runs. Reopen comparisons
+from the sidebar. Its menu applies pin, settle, snooze and archive to linked source and shared
+conversations. Threads on another native shelf remain there until an action moves them. Restore
+archived comparisons from **Settings → Archive**. Rename or regenerate the comparison title without
+changing conversation titles.
 
-Automatic initiation resumes when this client is open. It requires writable browser storage
-and browser locking; unsupported contexts show an explanation and send no merge request.
-Use localhost or a supported secure connection. Original provider threads remain available.
-Older manual comparisons retain their merge setup and saved versions.
+**Delete comparison** confirms each time. Leave **Also delete linked threads** checked to delete
+those conversations and eligible unused worktrees, including their local changes, with this one
+confirmation. The worktree note appears whenever linked conversations currently use worktrees,
+including worktrees added by later follow-ups. Worktrees used elsewhere and main/project checkouts
+are retained; cleanup failures are reported separately.
+Uncheck it to remove only the grouping and keep conversations, drafts, worktrees and running work.
+Groups/preferences are stored on this client, not synchronized across devices; clearing site data
+can remove them. If a live thread is unavailable, a labeled original snapshot may appear without
+later history. For uncertain shared delivery, **Check / retry the same delivery** uses the saved
+request identity; it does not automatically issue a new request. Inspect individual uncertain
+source threads before retrying.
+
+No automatic winner selection or dedicated synthesis/differences interface is provided. Provider
+responses can be wrong, and identical prompts do not imply identical tool or workspace access.
 
 ## Attach files
 

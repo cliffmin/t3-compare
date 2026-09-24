@@ -2,12 +2,12 @@
 
 ## First checkout
 
-Install `vp` using the [root README](../../README.md#install-vp). The checkout requires Node 24;
+Install `vp` using the [Vite+ guide](https://viteplus.dev/guide/). The checkout requires Node 24.13.1 or later in the 24.x series;
 Bun is optional. From the repository root:
 
 ```sh
-vp i
-vp run dev
+vp install --frozen-lockfile
+T3CODE_TELEMETRY_ENABLED=false vp run dev --home-dir "$PWD/.t3"
 ```
 
 Open the pairing URL printed by the dev runner. The bare origin does not authenticate
@@ -108,9 +108,9 @@ vp run --filter <package> typecheck
 ```
 
 Use `vp run lint:mobile` for native mobile changes. CI owns the full suite; see
-[ci.yml](../../.github/workflows/ci.yml) for its current jobs.
-The [manual Windows lane](../../.github/workflows/windows-tests.yml) is available for focused
-Windows investigation while that suite is not a required gate.
+[fork-ci.yml](../../.github/workflows/fork-ci.yml) for this fork's current jobs.
+The inherited [manual Windows lane](../../.github/workflows/windows-tests.yml) is restricted to
+upstream; it does not run for this fork. Fork CI does not verify Windows or desktop packaging.
 
 ### Unused code
 

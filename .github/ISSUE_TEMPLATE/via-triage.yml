@@ -1,12 +1,12 @@
 name: Triage report
-description: Filed with `npx t3 triage`, where a coding agent investigated the machine. For hand-written reports use the bug report template instead.
+description: A sanitized investigation report for T3 Compare. The inherited t3 triage command targets upstream; do not use it for this fork.
 labels:
   - via-triage
 body:
   - type: markdown
     attributes:
       value: |
-        This structure is what `t3 triage` agents follow. Keep one problem per issue
+        Use this form for a locally prepared fork investigation. Keep one problem per issue
         and redact secrets and home directory paths from anything you paste.
 
   - type: textarea

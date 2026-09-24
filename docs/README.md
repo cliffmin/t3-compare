@@ -1,8 +1,12 @@
-# T3 Code docs
+# T3 Compare documentation
 
-## Using T3 Code
+Start with the [product status and roadmap](./roadmap.md) and
+[current comparison workflow](./user/composer.md#compare-provider-answers). Most guides below
+describe the inherited T3 Code foundation; upstream installation links install upstream T3.
 
-- [Install T3 Code](./user/install.md)
+## Using the app
+
+- [Run T3 Compare from source](./user/install.md)
 - [Messages and context](./user/composer.md)
 - [Working with threads](./user/thread-sidebar.md)
 - [Permission modes](./user/permission-modes.md)
@@ -23,10 +27,10 @@
 
 ---
 
-## Working on T3 Code
+## Working on this fork
 
 Start with the [development runbook](./operations/development.md) and
-[contribution policy](../CONTRIBUTING.md).
+[contribution policy](../CONTRIBUTING.md). The [roadmap](./roadmap.md) distinguishes implemented behavior from pending acceptance.
 
 Internal notes preserve architectural decisions, constraints, and implementation traps that the
 source alone does not explain. Most code changes do not need an internal documentation update. Follow the

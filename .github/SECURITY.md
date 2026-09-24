@@ -1,8 +1,22 @@
-# Security policy
+# Security reporting
 
-Report security vulnerabilities affecting T3 Code or T3 Tools-operated infrastructure to
-[security@ping.gg](mailto:security@ping.gg). Please do not disclose them publicly until we have had
-a reasonable opportunity to investigate and remediate them.
+T3 Compare is an independent fork of T3 Code. Fork vulnerabilities must not be
+reported to upstream merely because this repository inherits upstream code.
 
-See the [full security policy](https://t3.codes/security-policy) for reporting details, scope,
-and safe harbor terms for good-faith research.
+## T3 Compare
+
+This source candidate has not yet completed public-release approval. A private
+vulnerability-reporting channel for this fork has not been enabled and verified.
+Do not put vulnerability details, credentials or private conversations in public issues.
+
+Before publication, the maintainer must enable and verify a private reporting channel
+and replace this notice with its instructions. This document does not claim that a
+Report a vulnerability button is currently available, offer safe harbor, or promise a
+response time. Publication remains gated on that setup.
+
+## Upstream T3 Code
+
+For vulnerabilities affecting upstream T3 Code or T3 Tools-operated infrastructure,
+follow the [upstream security policy](https://github.com/pingdotgg/t3code/security/policy).
+Upstream's reporting address, scope and safe-harbor terms belong to upstream; they are
+not commitments made by this fork.
