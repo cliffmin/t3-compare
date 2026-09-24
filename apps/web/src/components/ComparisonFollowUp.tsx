@@ -19,14 +19,18 @@ import * as Option from "effect/Option";
 import {
   CommandId,
   OrchestrationDispatchCommandError,
-  ThreadId,
   type OrchestrationThread,
 } from "@t3tools/contracts";
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { derivePendingRequests } from "@t3tools/client-runtime/pending-requests";
 import { comparisonFollowUpBody, comparisonSourceBusy } from "@t3tools/shared/comparisonFollowUp";
 import { readDurableComparison, saveComparisonClaim, type CompareRun } from "../compareRunStore";
-import { DraftId, useComposerDraftStore } from "../composerDraftStore";
+import { useComposerDraftStore } from "../composerDraftStore";
+import {
+  comparisonFollowUpDraftIdentity,
+  comparisonFollowUpDraftReady,
+  ensureComparisonFollowUpDraft,
+} from "../comparisonFollowUpDraft";
 import { useEnvironmentThread } from "../state/threads";
 import { useEnvironment } from "../state/environments";
 import { useThread, useThreadShell } from "../state/entities";
@@ -118,8 +122,7 @@ export function ComparisonFollowUp({
   }, []);
   // A comparison reserves one native destination before any network mutation.
   // The deterministic identity also converges when two tabs first open together.
-  const threadId = run.followUp?.threadId ?? ThreadId.make(`${run.id}:follow-up`);
-  const draftId = DraftId.make(run.followUp?.draftId ?? `${run.id}:follow-up-draft`);
+  const { threadId, draftId } = comparisonFollowUpDraftIdentity(run);
   const ref = useMemo(
     () => scopeThreadRef(run.environmentId, threadId),
     [run.environmentId, threadId],
@@ -143,17 +146,17 @@ export function ComparisonFollowUp({
       );
       return;
     }
-    if (!shell && !useComposerDraftStore.getState().getDraftSession(draftId)) {
-      useComposerDraftStore
-        .getState()
-        .setLogicalProjectDraftThreadId(
-          `comparison-follow-up:${run.id}`,
-          scopeProjectRef(run.environmentId, run.projectId),
-          draftId,
-          { threadId, envMode: "local", branch: null, worktreePath: null },
-        );
-    }
-  }, [draftId, run.environmentId, run.id, run.projectId, shell, threadId]);
+    ensureComparisonFollowUpDraft(durable, Boolean(shell));
+  }, [
+    draft,
+    draftId,
+    run.environmentId,
+    run.id,
+    run.projectId,
+    run.followUp?.pending,
+    shell,
+    threadId,
+  ]);
   const pending = run.followUp?.pending;
   const sendSaved = async (
     input: StartThreadTurnInput,
@@ -314,7 +317,7 @@ export function ComparisonFollowUp({
           Available completed answers will be included.
         </p>
       ) : null}
-      {draft || shell ? (
+      {shell || comparisonFollowUpDraftReady(run, draft) ? (
         <ChatView
           {...(shell ? { routeKind: "server" as const } : { routeKind: "draft" as const, draftId })}
           environmentId={run.environmentId}
