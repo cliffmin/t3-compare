@@ -88,10 +88,14 @@ export const CompareRunSchema = Schema.Struct({
   prompt: Schema.String,
   title: Schema.optionalKey(Schema.String),
   collapsed: Schema.optionalKey(Schema.Boolean),
+  archived: Schema.optionalKey(Schema.Boolean),
+  titleRevision: Schema.optionalKey(Schema.String),
+  actionError: Schema.optionalKey(Schema.String),
   followUp: Schema.optionalKey(
     Schema.Struct({
       threadId: ThreadId,
       draftId: Schema.String,
+      deleted: Schema.optionalKey(Schema.Boolean),
       pending: Schema.optionalKey(ClientOrchestrationCommand),
     }),
   ),
@@ -166,6 +170,27 @@ function persistRuns(runs: ReadonlyArray<CompareRun>): boolean {
   }
 }
 
+// Native deletion receipts remain authoritative when browser storage rejects a write.
+// Overlay only known successful identities; never infer deletion from a missing shell.
+const deletedThreadReceipts = new Map<EnvironmentId, Set<ThreadId>>();
+function withDeletionReceipts(run: CompareRun): CompareRun {
+  const receipts = deletedThreadReceipts.get(run.environmentId);
+  if (!receipts?.size) return run;
+  const entriesChanged = run.entries.some(
+    (entry) => entry.threadId && !entry.deleted && receipts.has(entry.threadId),
+  );
+  const sharedChanged =
+    run.followUp && !run.followUp.deleted && receipts.has(run.followUp.threadId);
+  if (!entriesChanged && !sharedChanged) return run;
+  return {
+    ...run,
+    entries: run.entries.map((entry) =>
+      entry.threadId && receipts.has(entry.threadId) ? { ...entry, deleted: true } : entry,
+    ),
+    ...(sharedChanged && run.followUp ? { followUp: { ...run.followUp, deleted: true } } : {}),
+  };
+}
+
 function readPersistedRuns(): ReadonlyArray<CompareRun> | null {
   if (!baseCompareRunStorage) return null;
   try {
@@ -174,7 +199,7 @@ function readPersistedRuns(): ReadonlyArray<CompareRun> | null {
     const parsed: unknown = JSON.parse(raw);
     const state = (parsed as { state?: unknown } | null)?.state;
     if (!state) return null;
-    return decodePersistedCompareRunState(state).runs;
+    return decodePersistedCompareRunState(state).runs.map(withDeletionReceipts);
   } catch {
     return null;
   }
@@ -188,6 +213,7 @@ interface CompareRunStoreState {
   recordRun: (run: CompareRun) => void;
   updateRun: (runId: string, update: (run: CompareRun) => CompareRun) => void;
   getRun: (runId: string) => CompareRun | null;
+  saveRun: (runId: string, update: (run: CompareRun) => CompareRun) => ComparisonSaveResult;
   renameRun: (runId: string, title: string) => ComparisonSaveResult;
   removeRun: (runId: string) => ComparisonSaveResult;
 }
@@ -216,17 +242,18 @@ export const useCompareRunStore = create<CompareRunStoreState>()((set, get) => (
     set({ runs: nextRuns });
   },
   getRun: (runId) => get().runs.find((candidate) => candidate.id === runId) ?? null,
-  renameRun: (runId, title) => {
-    const trimmed = title.trim();
-    if (!trimmed) return "failed";
+  saveRun: (runId, update) => {
     const currentRuns = readPersistedRuns() ?? get().runs;
     if (!currentRuns.some((run) => run.id === runId)) return "missing";
-    const nextRuns = currentRuns.map((run) =>
-      run.id === runId ? { ...run, title: trimmed } : run,
-    );
+    const nextRuns = currentRuns.map((run) => (run.id === runId ? update(run) : run));
     if (baseCompareRunStorage && !persistRuns(nextRuns)) return "failed";
     set({ runs: nextRuns });
     return baseCompareRunStorage ? "saved" : "session-only";
+  },
+  renameRun: (runId, title) => {
+    const trimmed = title.trim();
+    if (!trimmed) return "failed";
+    return get().saveRun(runId, (run) => ({ ...run, title: trimmed, titleRevision: randomUUID() }));
   },
   removeRun: (runId) => {
     const currentRuns = readPersistedRuns() ?? get().runs;
@@ -261,19 +288,14 @@ export function settleComparisonEntry(runId: string, index: number, entry: Compa
 
 /** Call only after a successful native deletion or an explicit thread.deleted event. */
 export function markComparisonThreadDeleted(environmentId: EnvironmentId, threadId: ThreadId) {
-  for (const run of readPersistedRuns() ?? useCompareRunStore.getState().runs) {
-    if (run.environmentId !== environmentId) continue;
-    useCompareRunStore.getState().updateRun(run.id, (current) =>
-      current.entries.some((entry) => entry.threadId === threadId && !entry.deleted)
-        ? {
-            ...current,
-            entries: current.entries.map((entry) =>
-              entry.threadId === threadId ? { ...entry, deleted: true } : entry,
-            ),
-          }
-        : current,
-    );
-  }
+  const receipts = deletedThreadReceipts.get(environmentId) ?? new Set<ThreadId>();
+  receipts.add(threadId);
+  deletedThreadReceipts.set(environmentId, receipts);
+  const store = useCompareRunStore.getState();
+  const runs = (readPersistedRuns() ?? store.runs).map(withDeletionReceipts);
+  // Publishing the receipt in memory is mandatory even if persistence fails.
+  persistRuns(runs);
+  useCompareRunStore.setState({ runs });
 }
 
 // Grouping remains last-write-wins; the separate locked attempt ledger owns dispatch identity.

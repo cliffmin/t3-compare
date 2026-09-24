@@ -130,3 +130,77 @@ it("late start receipt preserves an already-confirmed native child deletion", as
   expect(api.readDurableComparison("one")?.entries[0]?.deleted).toBe(true);
   expect(api.readDurableComparison("one")?.entries[0]?.threadId).toBe("child");
 });
+
+describe("aggregate comparison persistence", () => {
+  it("persists archive state, rejects quota failure, and restores without changing membership", async () => {
+    const { useCompareRunStore } = await import("./compareRunStore");
+    const store = useCompareRunStore.getState();
+    store.recordRun(run());
+    blocked = true;
+    expect(store.saveRun("one", (r) => ({ ...r, archived: true }))).toBe("failed");
+    expect(store.getRun("one")?.archived).toBeUndefined();
+    blocked = false;
+    expect(store.saveRun("one", (r) => ({ ...r, archived: true }))).toBe("saved");
+    vi.resetModules();
+    const reloaded = (await import("./compareRunStore")).useCompareRunStore.getState();
+    expect(reloaded.getRun("one")?.archived).toBe(true);
+    expect(reloaded.saveRun("one", (r) => ({ ...r, archived: false }))).toBe("saved");
+    expect(reloaded.getRun("one")?.entries).toEqual(run().entries);
+  });
+  it("a later manual rename supersedes an in-flight title and a removed root stays removed", async () => {
+    const { useCompareRunStore } = await import("./compareRunStore");
+    const store = useCompareRunStore.getState();
+    store.recordRun(run());
+    store.saveRun("one", (r) => ({ ...r, titleRevision: "generation" }));
+    store.renameRun("one", "Manual");
+    store.saveRun("one", (r) =>
+      r.titleRevision === "generation" ? { ...r, title: "Late generation" } : r,
+    );
+    expect(store.getRun("one")?.title).toBe("Manual");
+    store.removeRun("one");
+    expect(store.saveRun("one", (r) => ({ ...r, title: "Late" }))).toBe("missing");
+    expect(store.getRun("one")).toBeNull();
+  });
+  it("retains shared deletion identity and never deletes hidden legacy outputs", async () => {
+    const { useCompareRunStore, markComparisonThreadDeleted } = await import("./compareRunStore");
+    const store = useCompareRunStore.getState();
+    store.recordRun({
+      ...run(),
+      followUp: { threadId: ThreadId.make("shared"), draftId: "draft" },
+    });
+    markComparisonThreadDeleted(run().environmentId, ThreadId.make("shared"));
+    vi.resetModules();
+    expect(
+      (await import("./compareRunStore")).useCompareRunStore.getState().getRun("one")?.followUp
+        ?.deleted,
+    ).toBe(true);
+  });
+});
+
+it("retains successful native delete receipts after quota failure, then finishes after storage recovers", async () => {
+  const api = await import("./compareRunStore");
+  const store = api.useCompareRunStore.getState();
+  store.recordRun({
+    ...run(),
+    entries: [
+      ...run().entries,
+      { ...run().entries[0]!, threadId: ThreadId.make("survivor"), launch: "started" },
+    ],
+    followUp: { threadId: ThreadId.make("shared"), draftId: "draft" },
+  });
+  blocked = true;
+  api.markComparisonThreadDeleted(run().environmentId, ThreadId.make("child"));
+  api.markComparisonThreadDeleted(run().environmentId, ThreadId.make("shared"));
+  expect(api.readDurableComparison("one")?.entries[0]?.deleted).toBe(true);
+  expect(api.readDurableComparison("one")?.followUp?.deleted).toBe(true);
+  expect(api.readDurableComparison("one")?.entries[1]?.deleted).toBeUndefined();
+  expect(store.removeRun("one")).toBe("failed");
+  blocked = false;
+  expect(store.saveRun("one", (r) => ({ ...r, actionError: "Retry survivor" }))).toBe("saved");
+  vi.resetModules();
+  const reloaded = await import("./compareRunStore");
+  expect(reloaded.readDurableComparison("one")?.entries[0]?.deleted).toBe(true);
+  expect(reloaded.readDurableComparison("one")?.followUp?.deleted).toBe(true);
+  expect(reloaded.readDurableComparison("one")?.entries[1]?.deleted).toBeUndefined();
+  expect(reloaded.useCompareRunStore.getState().removeRun("one")).toBe("saved");
+});

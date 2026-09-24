@@ -86,6 +86,9 @@ import {
 } from "./review.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
+  GenerateComparisonTitleInput,
+  GenerateComparisonTitleResult,
+  GenerateComparisonTitleError,
   ClientOrchestrationCommand,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
@@ -1262,6 +1265,12 @@ const WsSubscribeDeviceStateRpc = Rpc.make(WS_METHODS.subscribeDeviceState, {
   stream: true,
 });
 
+const WsGenerateComparisonTitleRpc = Rpc.make(ORCHESTRATION_WS_METHODS.generateComparisonTitle, {
+  payload: GenerateComparisonTitleInput,
+  success: GenerateComparisonTitleResult,
+  error: Schema.Union([GenerateComparisonTitleError, EnvironmentAuthorizationError]),
+});
+
 const WsOrchestrationDispatchCommandRpc = Rpc.make(ORCHESTRATION_WS_METHODS.dispatchCommand, {
   payload: ClientOrchestrationCommand,
   success: OrchestrationRpcSchemas.dispatchCommand.output,
@@ -1517,6 +1526,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeAuthAccessRpc,
   WsSubscribeBackgroundPolicyRpc,
   WsSubscribeResourceTelemetryRpc,
+  WsGenerateComparisonTitleRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetWorkflowScriptRpc,
   WsOrchestrationGetTurnDiffRpc,

@@ -2164,12 +2164,13 @@ export default function ChatView(props: ChatViewProps) {
   // timestamp backwards).
   useEffect(() => {
     const completedAt = serverThread?.latestTurn?.completedAt;
-    if (!serverThread?.id || !completedAt) return;
+    if (embedded || !serverThread?.id || !completedAt) return;
     markThreadVisited(
       scopedThreadKey(scopeThreadRef(serverThread.environmentId, serverThread.id)),
       completedAt,
     );
   }, [
+    embedded,
     markThreadVisited,
     serverThread?.environmentId,
     serverThread?.id,

@@ -25,7 +25,7 @@ export function comparisonFollowUpDraftReady(run: CompareRun, draft: DraftSessio
 }
 
 export function ensureComparisonFollowUpDraft(run: CompareRun, hasServerShell: boolean) {
-  if (hasServerShell || run.followUp?.pending || !run.projectId) return;
+  if (hasServerShell || run.followUp?.pending || run.followUp?.deleted || !run.projectId) return;
   const { threadId, draftId } = comparisonFollowUpDraftIdentity(run);
   const store = useComposerDraftStore.getState();
   const draft = store.getDraftSession(draftId);

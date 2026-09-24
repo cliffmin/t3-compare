@@ -157,3 +157,9 @@ it("does not change valid Compare drafts or unrelated native sessions", () => {
   expect(draft()).toBe(before);
   expect(useComposerDraftStore.getState().getDraftSession(native)).toBe(nativeBefore);
 });
+
+it("does not recreate an owned draft after confirmed shared-thread deletion", () => {
+  const deleted = { ...legacy, followUp: { ...legacy.followUp!, deleted: true } };
+  ensureComparisonFollowUpDraft(deleted, false);
+  expect(draft(deleted)).toBeNull();
+});

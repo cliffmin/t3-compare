@@ -10,6 +10,7 @@ export function comparisonSidebarGroups(
   const rows = items.filter((item) => item.kind === "thread");
   const claimed = new Set<string>();
   const groups = runs.flatMap((run) => {
+    if (run.archived) return [];
     const outputs = (run.merges ?? []).filter(
       (merge) => run.automatic || merge.output !== undefined,
     );

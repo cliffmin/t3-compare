@@ -33,6 +33,7 @@ import {
 } from "./pullRequest.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
+  generateComparisonTitle: "orchestration.generateComparisonTitle",
   dispatchCommand: "orchestration.dispatchCommand",
   getWorkflowScript: "orchestration.getWorkflowScript",
   getTurnDiff: "orchestration.getTurnDiff",
@@ -2369,6 +2370,19 @@ export const OrchestrationRpcSchemas = {
     output: OrchestrationShellStreamItem,
   },
 } as const;
+
+/** Return-only generation for client-owned comparison titles; never mutates a thread. */
+export const GenerateComparisonTitleInput = Schema.Struct({
+  projectId: ProjectId,
+  prompt: TrimmedNonEmptyString.check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_INPUT_CHARS)),
+  previousTitle: TrimmedNonEmptyString.check(Schema.isMaxLength(1_000)),
+});
+export type GenerateComparisonTitleInput = typeof GenerateComparisonTitleInput.Type;
+export const GenerateComparisonTitleResult = Schema.Struct({ title: Schema.NullOr(Schema.String) });
+export class GenerateComparisonTitleError extends Schema.TaggedError<GenerateComparisonTitleError>()(
+  "GenerateComparisonTitleError",
+  { message: TrimmedNonEmptyString },
+) {}
 
 export class OrchestrationGetSnapshotError extends Schema.TaggedError<OrchestrationGetSnapshotError>()(
   "OrchestrationGetSnapshotError",

@@ -135,7 +135,7 @@ export function ComparisonFollowUp({
     configs.get(run.environmentId)?.environment.capabilities.comparisonFollowUp === true;
   const draft = useComposerDraftStore((state) => state.draftThreadsByThreadKey[draftId]);
   useEffect(() => {
-    if (!run.projectId) return;
+    if (!run.projectId || run.followUp?.deleted) return;
     const durable = readDurableComparison(run.id);
     if (
       !durable ||
@@ -154,6 +154,7 @@ export function ComparisonFollowUp({
     run.id,
     run.projectId,
     run.followUp?.pending,
+    run.followUp?.deleted,
     shell,
     threadId,
   ]);
@@ -263,6 +264,15 @@ export function ComparisonFollowUp({
           : waiting
             ? "Waiting for providers"
             : (preview?.error ?? null));
+  if (run.followUp?.deleted)
+    return (
+      <section
+        aria-label="Comparison follow-up"
+        className="border-t p-3 text-sm text-muted-foreground"
+      >
+        Shared conversation deleted.
+      </section>
+    );
   return (
     <section
       className="flex min-h-0 shrink-0 flex-col border-t border-border bg-background"

@@ -4866,6 +4866,7 @@ export default function Sidebar() {
                         );
                       };
                       for (const run of comparisonRuns) {
+                        if (run.archived) continue;
                         if (groups.some((group) => group.run.id === run.id)) continue;
                         if (
                           !run.projectId ||

@@ -1,3 +1,4 @@
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import { markComparisonThreadDeleted } from "../compareRunStore";
 import {
   parseScopedThreadKey,
@@ -315,8 +316,18 @@ export function useThreadActions() {
   );
 
   const deleteThread = useCallback(
-    async (target: ScopedThreadRef, opts: { deletedThreadKeys?: ReadonlySet<string> } = {}) => {
-      const resolved = resolveThreadTarget(target);
+    async (
+      target: ScopedThreadRef,
+      opts: {
+        deletedThreadKeys?: ReadonlySet<string>;
+        comparisonThreads?: ReadonlyArray<EnvironmentThreadShell>;
+      } = {},
+    ) => {
+      const archived = opts.comparisonThreads?.find(
+        (thread) => thread.environmentId === target.environmentId && thread.id === target.threadId,
+      );
+      const resolved =
+        resolveThreadTarget(target) ?? (archived ? { thread: archived, threadRef: target } : null);
       if (!resolved) {
         // Thread not in main store (e.g. archived thread) — dispatch delete directly.
         const result = await deleteThreadMutation({
@@ -330,10 +341,12 @@ export function useThreadActions() {
         return result;
       }
       const { thread, threadRef } = resolved;
-      const threads = readEnvironmentThreadRefs(threadRef.environmentId).flatMap((ref) => {
-        const shell = readThreadShell(ref);
-        return shell === null ? [] : [shell];
-      });
+      const threads =
+        opts.comparisonThreads ??
+        readEnvironmentThreadRefs(threadRef.environmentId).flatMap((ref) => {
+          const shell = readThreadShell(ref);
+          return shell === null ? [] : [shell];
+        });
       const threadProject = readProject({
         environmentId: threadRef.environmentId,
         projectId: thread.projectId,
@@ -358,7 +371,13 @@ export function useThreadActions() {
       const displayWorktreePath = orphanedWorktreePath
         ? formatWorktreePathForDisplay(orphanedWorktreePath)
         : null;
-      const canDeleteWorktree = orphanedWorktreePath !== null && threadProject !== null;
+      const canDeleteWorktree =
+        orphanedWorktreePath !== null &&
+        threadProject !== null &&
+        (!opts.comparisonThreads ||
+          (orphanedWorktreePath !== threadProject.workspaceRoot &&
+            appAtomRegistry.get(environmentServerConfigsAtom).get(threadRef.environmentId)
+              ?.environment.capabilities.guardedWorktreeRemoval === true));
       const localApi = readLocalApi();
       let shouldDeleteWorktree = false;
       const environmentSettings = appAtomRegistry
@@ -386,16 +405,18 @@ export function useThreadActions() {
       }
 
       if (thread.session && thread.session.status !== "stopped") {
-        await stopThreadSession({
+        const stopped = await stopThreadSession({
           environmentId: threadRef.environmentId,
           input: { threadId: threadRef.threadId },
         });
+        if (opts.comparisonThreads && stopped._tag === "Failure") return stopped;
       }
 
-      await closeTerminal({
+      const closed = await closeTerminal({
         environmentId: threadRef.environmentId,
         input: { threadId: threadRef.threadId, deleteHistory: true },
       });
+      if (opts.comparisonThreads && closed._tag === "Failure") return closed;
 
       const deletedThreadIds = deletedIds ?? new Set<ThreadId>();
       const currentRouteThreadRef = getCurrentRouteThreadRef();
@@ -452,6 +473,7 @@ export function useThreadActions() {
           cwd: threadProject.workspaceRoot,
           path: orphanedWorktreePath,
           force: true,
+          ...(opts.comparisonThreads ? { requireUnreferenced: true } : {}),
         },
       });
       const refreshResult =

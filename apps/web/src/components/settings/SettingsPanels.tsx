@@ -1,3 +1,6 @@
+import { useThreadShells as useComparisonArchiveShells } from "../../state/entities";
+import { ComparisonArchiveRow } from "../ComparisonArchiveRow";
+import { useCompareRunStore } from "../../compareRunStore";
 import { SettingsGroup } from "./SettingsGroup";
 import { Spinner } from "~/components/ui/spinner";
 import { NotificationSettings } from "./NotificationSettings";
@@ -3238,6 +3241,8 @@ export function GeneralSettingsPanel() {
 export function ArchivedThreadsPanel() {
   const { scope } = useSettingsScope();
   const { unarchiveThread, confirmAndDeleteThread } = useThreadActions();
+  const comparisonRuns = useCompareRunStore((state) => state.runs);
+  const comparisonActiveShells = useComparisonArchiveShells();
   const {
     snapshots: archivedSnapshots,
     error: archiveError,
@@ -3346,6 +3351,40 @@ export function ArchivedThreadsPanel() {
 
   return (
     <SettingsPageContainer>
+      {comparisonRuns
+        .filter(
+          (run) =>
+            scope.environmentIds.includes(run.environmentId) &&
+            ((scope.kind !== "project" && scope.kind !== "checkout") ||
+              scope.members.some(
+                (member) =>
+                  member.environmentId === run.environmentId && member.id === run.projectId,
+              )) &&
+            (run.archived ||
+              archivedSnapshots.some(
+                ({ environmentId, snapshot }) =>
+                  environmentId === run.environmentId &&
+                  snapshot.threads.some(
+                    (thread) =>
+                      run.entries.some((entry) => !entry.deleted && entry.threadId === thread.id) ||
+                      (!run.followUp?.deleted && run.followUp?.threadId === thread.id),
+                  ),
+              )),
+        )
+        .map((run) => (
+          <ComparisonArchiveRow
+            key={run.id}
+            run={run}
+            threads={[
+              ...comparisonActiveShells,
+              ...archivedSnapshots.flatMap(({ environmentId, snapshot }) =>
+                snapshot.threads.map((thread) => ({ ...thread, environmentId })),
+              ),
+            ]}
+            error={archiveError}
+            loading={isLoadingArchive}
+          />
+        ))}
       {archivedGroups.length === 0 ? (
         <SettingsSection
           id={isLoadingArchive ? undefined : searchableSetting("archive").id}

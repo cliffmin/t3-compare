@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
 import {
   completeConfirmDialogClose,
@@ -75,22 +75,51 @@ export function ConfirmDialogHost() {
         if (!open) completeConfirmDialogClose();
       }}
     >
-      <AlertDialogPopup className="max-w-lg">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="wrap-anywhere">{copy.title}</AlertDialogTitle>
-          {copy.description ? (
-            <AlertDialogDescription className="whitespace-pre-line">
-              {copy.description}
-            </AlertDialogDescription>
-          ) : null}
-        </AlertDialogHeader>
-        <AlertDialogFooter>
+      <ConfirmationContent
+        title={copy.title}
+        description={copy.description}
+        variant={confirmVariant}
+        onConfirm={onConfirm}
+      />
+    </AlertDialog>
+  );
+}
+
+/** Shared native confirmation presentation, with optional aggregate-action controls. */
+export function ConfirmationContent({
+  title,
+  description,
+  variant = "default",
+  onConfirm,
+  footer,
+  disabled = false,
+}: {
+  title: string;
+  description: ReactNode;
+  variant?: "default" | "destructive";
+  onConfirm: () => void;
+  footer?: ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <AlertDialogPopup className={footer ? "max-w-2xl" : "max-w-lg"}>
+      <AlertDialogHeader>
+        <AlertDialogTitle className="wrap-anywhere">{title}</AlertDialogTitle>
+        {description ? (
+          <AlertDialogDescription className="whitespace-pre-line">
+            {description}
+          </AlertDialogDescription>
+        ) : null}
+      </AlertDialogHeader>
+      <AlertDialogFooter className={footer ? "flex-row flex-wrap items-center" : undefined}>
+        {footer ? <div className="mr-auto min-w-0 flex-1 basis-64">{footer}</div> : null}
+        <div className={footer ? "ml-auto flex shrink-0 gap-2" : "contents"}>
           <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
-          <Button variant={confirmVariant} onClick={onConfirm}>
+          <Button variant={variant} disabled={disabled} onClick={onConfirm}>
             Confirm
           </Button>
-        </AlertDialogFooter>
-      </AlertDialogPopup>
-    </AlertDialog>
+        </div>
+      </AlertDialogFooter>
+    </AlertDialogPopup>
   );
 }

@@ -1,11 +1,15 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Link, useRouter } from "@tanstack/react-router";
+import { useComparisonDeleteDialog } from "./ComparisonDeleteDialog";
+import { useArchivedThreadSnapshots } from "../lib/archivedThreadsState";
+import { useComparisonActions } from "../hooks/useComparisonActions";
+import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
+import { useUiStateStore } from "../uiStateStore";
+import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 import { ChevronRightIcon, EllipsisIcon } from "lucide-react";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import { readDurableComparison, useCompareRunStore, type CompareRun } from "../compareRunStore";
+import { useCompareRunStore, type CompareRun } from "../compareRunStore";
 import { readLocalApi } from "../localApi";
-import { readThreadShell } from "../state/entities";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Dialog, DialogPopup, DialogTitle } from "./ui/dialog";
@@ -21,7 +25,30 @@ export function ComparisonGroup({
   threads: ReadonlyArray<EnvironmentThreadShell>;
   children: ReactNode;
 }) {
-  const router = useRouter();
+  const actions = useComparisonActions(run.id);
+  const { copyToClipboard } = useCopyToClipboard();
+  const deletion = useComparisonDeleteDialog(run, actions);
+  const environmentIds = useMemo(() => [run.environmentId], [run.environmentId]);
+  const archive = useArchivedThreadSnapshots(environmentIds);
+  const allThreads = [
+    ...threads,
+    ...archive.snapshots.flatMap(({ environmentId, snapshot }) =>
+      snapshot.threads.map((thread) => ({ ...thread, environmentId })),
+    ),
+  ];
+  const visits = useUiStateStore((state) => state.threadLastVisitedAtById);
+  const linked = allThreads.filter(
+    (thread) =>
+      thread.environmentId === run.environmentId &&
+      (run.entries.some((entry) => entry.threadId === thread.id && !entry.deleted) ||
+        (!run.followUp?.deleted && run.followUp?.threadId === thread.id)),
+  );
+  const unread = linked.some(
+    (thread) =>
+      thread.latestTurn?.completedAt &&
+      (visits[scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))] ?? "") <
+        thread.latestTurn.completedAt,
+  );
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState("");
   const saveNotice = (result: "saved" | "session-only" | "failed" | "missing") => {
@@ -42,41 +69,24 @@ export function ComparisonGroup({
   const openMenu = async (position: { x: number; y: number }) => {
     const api = readLocalApi();
     if (!api) return;
-    const action = await api.contextMenu.show(
-      [
-        { id: "rename", label: "Rename comparison", icon: "pencil" },
-        { id: "delete", label: "Delete comparison…", icon: "trash", destructive: true },
-      ],
-      position,
-    );
+    const action = await api.contextMenu.show(await actions.menu(), position);
+    if (!action) return;
     if (action === "rename") {
       setTitle(
         useCompareRunStore.getState().getRun(run.id)?.title ?? comparisonFallbackTitle(run.prompt),
       );
       setRenaming(true);
-    }
-    if (action === "delete") {
-      const confirmed = await api.dialogs.confirm(
-        "Delete this comparison? The comparison view and grouping will be removed. Provider threads, conversations, and worktrees will be kept. Running provider threads will continue.",
-        { variant: "destructive" },
+    } else if (action === "delete") {
+      await deletion.open();
+    } else if (action === "copy-id" || action === "copy-link") {
+      copyToClipboard(
+        action === "copy-id"
+          ? run.id
+          : new URL(`/compare/${encodeURIComponent(run.id)}?tab=compare`, window.location.origin)
+              .href,
+        undefined,
       );
-      if (!confirmed) return;
-      const latest = readDurableComparison(run.id) ?? useCompareRunStore.getState().getRun(run.id);
-      if (!saveNotice(useCompareRunStore.getState().removeRun(run.id))) return;
-      if (router.state.location.pathname !== `/compare/${run.id}`) return;
-      const child = (latest?.entries ?? []).flatMap((entry) => {
-        if (!entry.threadId || entry.deleted) return [];
-        const shell = readThreadShell(scopeThreadRef(run.environmentId, entry.threadId));
-        return shell && shell.archivedAt === null ? [shell] : [];
-      })[0];
-      await (child
-        ? router.navigate({
-            to: "/$environmentId/$threadId",
-            params: { environmentId: child.environmentId, threadId: child.id },
-            replace: true,
-          })
-        : router.navigate({ to: "/", replace: true }));
-    }
+    } else await actions.dispatch(action);
   };
   const showMenu = (position: { x: number; y: number }) => {
     void openMenu(position).catch((error: unknown) => {
@@ -134,6 +144,17 @@ export function ComparisonGroup({
           to="/compare/$runId"
           params={{ runId: run.id }}
           search={{ tab: "compare" }}
+          onClick={() => {
+            for (const thread of linked) {
+              if (thread.latestTurn?.completedAt)
+                useUiStateStore
+                  .getState()
+                  .markThreadVisited(
+                    scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+                    thread.latestTurn.completedAt,
+                  );
+            }
+          }}
           activeOptions={{ exact: true, includeSearch: true }}
           activeProps={{
             className: "bg-sidebar-accent text-sidebar-accent-foreground",
@@ -141,14 +162,19 @@ export function ComparisonGroup({
           }}
           className="min-w-0 flex-1 rounded py-2 pr-2 focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <p className="truncate text-sm">
+          <p className={`truncate text-sm ${unread ? "font-semibold" : ""}`}>
             {run.title ?? generatedTitle ?? comparisonFallbackTitle(run.prompt)}
           </p>
-          <p className="text-xs text-muted-foreground">{run.entries.length} providers selected</p>
+          <p className="text-xs text-muted-foreground">
+            {unread ? "Unread · " : ""}
+            {run.entries.length} providers selected
+          </p>
+          {run.actionError ? <p className="text-xs text-destructive">{run.actionError}</p> : null}
         </Link>
         <Button
           variant="ghost"
           size="icon-xs"
+          disabled={actions.busy}
           aria-label="Comparison actions"
           onClick={(event) => {
             const rect = event.currentTarget.getBoundingClientRect();
@@ -158,6 +184,7 @@ export function ComparisonGroup({
           <EllipsisIcon className="size-4" />
         </Button>
       </div>
+      {deletion.dialog}
       <Dialog open={renaming} onOpenChange={setRenaming}>
         <DialogPopup>
           <DialogTitle>Rename comparison</DialogTitle>

@@ -1,3 +1,5 @@
+import { ensureUnreferencedWorktree } from "./git/unreferencedWorktree.ts";
+import { generateComparisonTitle } from "./textGeneration/ComparisonTitle.ts";
 import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
@@ -1855,6 +1857,12 @@ const makeWsRpcLayer = (
           .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
 
       return WsRpcGroup.of({
+        [ORCHESTRATION_WS_METHODS.generateComparisonTitle]: (input) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.generateComparisonTitle,
+            generateComparisonTitle(input),
+            { "rpc.aggregate": "orchestration" },
+          ),
         [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.dispatchCommand,
@@ -3329,7 +3337,10 @@ const makeWsRpcLayer = (
         [WS_METHODS.vcsRemoveWorktree]: (input) =>
           observeRpcEffect(
             WS_METHODS.vcsRemoveWorktree,
-            gitWorkflow.removeWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            Effect.gen(function* () {
+              if (input.requireUnreferenced) yield* ensureUnreferencedWorktree(input);
+              return yield* gitWorkflow.removeWorktree(input);
+            }).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.vcsCreateRef]: (input) =>
