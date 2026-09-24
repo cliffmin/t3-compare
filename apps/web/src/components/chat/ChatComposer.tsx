@@ -5093,7 +5093,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   };
   const comparisonControl =
     routeKind === "draft" && supportsMultipleModels ? (
-      <label className="inline-flex shrink-0 items-center gap-1.5 px-1 text-xs text-muted-foreground">
+      <div className="inline-flex shrink-0 items-center gap-1.5 px-1 text-xs text-muted-foreground">
         <Switch
           size="sm"
           aria-label="Compare providers"
@@ -5102,8 +5102,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           disabled={isSendBusy}
           onCheckedChange={toggleComparison}
         />
-        Compare
-      </label>
+        <button
+          type="button"
+          disabled={multipleModelSelections === null || isSendBusy}
+          aria-label="Configure comparison providers"
+          aria-haspopup="dialog"
+          aria-expanded={multipleModelSelections !== null && isComposerModelPickerOpen}
+          className={cn(
+            "cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
+            multipleModelSelections !== null ? "font-bold text-foreground" : "font-normal",
+          )}
+          onClick={() => setIsComposerModelPickerOpen(true)}
+        >
+          Compare
+        </button>
+      </div>
     ) : null;
   const restingBlockDefs = [
     ...(providerTraitsPicker

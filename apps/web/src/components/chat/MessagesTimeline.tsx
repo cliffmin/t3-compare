@@ -452,6 +452,8 @@ interface MessagesTimelineProps {
   anchorMessageId: MessageId | null;
   onAnchorReady: (messageId: MessageId, anchorIndex: number) => void;
   contentInsetEndAdjustment: number;
+  /** Embedded source panes chain at their boundary to reach wrapped comparison rows. */
+  allowScrollChaining?: boolean;
   /**
    * Whether the timeline should keep pinning to the live edge as content
    * grows. Off while the user is reading history; LegendList's own
@@ -522,6 +524,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   anchorMessageId,
   onAnchorReady,
   contentInsetEndAdjustment,
+  allowScrollChaining = false,
   liveFollowEnabled,
   onIsAtEndChange,
   onContentOverflowChange,
@@ -1324,7 +1327,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             onScroll={handleScroll}
             onItemSizeChanged={reportContentOverflow}
             className={cn(
-              "scrollbar-gutter-both h-full min-h-0 overflow-x-hidden overscroll-y-contain px-3 [overflow-anchor:none] sm:px-5",
+              "scrollbar-gutter-both h-full min-h-0 overflow-x-hidden px-3 [overflow-anchor:none] sm:px-5",
+              allowScrollChaining ? "overscroll-y-auto" : "overscroll-y-contain",
               topFadeEnabled && "topbar-scroll-fade",
             )}
             ListHeaderComponent={

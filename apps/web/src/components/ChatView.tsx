@@ -9892,7 +9892,12 @@ export default function ChatView(props: ChatViewProps) {
 
   return (
     <div
-      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+      className={cn(
+        "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background",
+        embedded &&
+          !embedded.followUp &&
+          "[container-type:size] [&_.composer-tiptap]:max-h-[max(4.375rem,min(12.5rem,calc(100cqh-12rem)))]",
+      )}
       onPointerDownCapture={embedded?.onActivate}
       onFocusCapture={embedded?.onActivate}
       data-embedded-chat={embedded ? threadId : undefined}
@@ -10032,6 +10037,7 @@ export default function ChatView(props: ChatViewProps) {
             >
               {/* Messages — LegendList handles virtualization and scrolling internally */}
               <MessagesTimeline
+                allowScrollChaining={Boolean(embedded && !embedded.followUp)}
                 hiddenUserMessageId={embedded?.hiddenUserMessageId}
                 citationRequest={paintOnlyDisplayedTimeline ? null : citationRequest}
                 citationHistoryLoading={threadDetailLoading}

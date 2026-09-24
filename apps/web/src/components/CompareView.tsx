@@ -56,8 +56,12 @@ export function CompareView({ run }: { run: CompareRun }) {
           className="min-h-[12rem] min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
           data-comparison-scroll
         >
-          <div className="flex min-h-full flex-col">
-            <div className="flex justify-center px-4 py-4" aria-label="Shared comparison prompt">
+          {/* A definite height bounds fractional rows instead of sizing them to all messages. */}
+          <div className="flex h-full flex-col">
+            <div
+              className="flex shrink-0 justify-center px-4 py-4"
+              aria-label="Shared comparison prompt"
+            >
               <div
                 className={cn(USER_MESSAGE_BUBBLE_CLASS, "w-fit max-w-[min(100%,48rem)] text-left")}
               >
