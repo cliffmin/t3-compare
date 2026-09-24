@@ -1,51 +1,51 @@
-# T3 Code
+# T3 Compare
 
-T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.
+T3 Compare is Cliff Min's private, experimental fork of
+[T3 Code](https://github.com/pingdotgg/t3code). Upstream supplies the provider adapters,
+typed WebSocket server, event-sourced orchestration, and web/desktop/mobile foundation.
+Upstream's users, maintainers, hosted services, and release claims are not this fork's.
+Preserve its license, copyright notices, and attribution.
 
-You can think of T3 Code as an open source "bring-your-own-subscription" alternative to apps like Claude Desktop, Codex App, Cursor Glass and Conductor.
+## Direction and authority
 
-## What makes T3 Code special?
+The product direction is one prompt sent to selected providers with their selected models/options,
+followed by native live side-by-side comparison of individual answers. This is a general comparison
+product; coding and the planned AWLA UI/UX case study are examples, not application-specific limits.
+New comparisons do not automatically merge answers. Preserve existing saved records and underlying
+threads; historical navigation follows the accepted feature specifications. Do not revive permanent
+dev-journey infrastructure.
 
-We have over 200,000 users who love T3 Code. It's important we maintain the things they love as we continue to iterate on the product. Here's a brief list of the things we can never compromise on.
+The [roadmap](docs/roadmap.md) owns product direction, current status, planned work, and unmeasured
+experiments. [Feature specifications](docs/specs/README.md) own accepted behavior and checks;
+roadmap entries do not authorize execution. Portfolio evidence must distinguish shared inputs and
+access differences, model suggestions, owner choices/rationale, implemented follow-through, and
+observed outcomes. Do not turn planned demonstrations or engineering strategies into claimed
+results, benchmarks, or measured improvements.
 
-### 1. Open at the core
+Comparison must reuse native provider execution, thread state, and timeline behavior,
+including streaming, activity/thinking, completion, errors, approvals, and questions.
+Do not substitute a flattened answer renderer or duplicate provider lifecycle for the
+normal thread experience. Engineering details belong in the accepted application spec.
 
-T3 Code is truly open. We share our roadmap, we share how we think about things, and of course we share all our code. A large number of our users run forks. We work in the open, and should strive to stay that way.
+Cliff owns product scope and acceptance. The planner translates owner-selected scope into
+mocks/specs and owns builder coordination and delivery review.
+Builders own application implementation and builds within their dispatch. Explicit mock
+acceptance authorizes the bounded local spec/build/verify/package/install sequence; working-app
+acceptance remains Cliff's decision. A documentation-only task does not accept a mock or
+authorize application work. Pushes, PRs, merges, public sharing/releases, paid provider
+evaluations, and changes to access or destructive scope need separate authorization.
 
-### 2. Performance without compromise
-
-Lots of apps have gotten bogged down with bad tech decisions and "slop". We have not, and we're proud of the performance of T3 Code. We regularly audit for performance regressions, often caused by sending too much data over websockets, css animations causing gpu spikes, lists being hard to render, and more. Make sure all changes are considerate of performance impact.
-
-### 3. Remote ready
-
-The architecture of T3 Code's websocket layer (npx t3) enables a lot of awesome remote features. These have become core to the product. Whether users are connecting directly over their local network, using Tailscale, or leaning in fully with T3 Connect (our tunnel solution, also in this repo), we need to make sure new features are properly supported.
-
-### 4. Multi-surface
-
-T3 Code has 3 key app surfaces: **web**, **desktop**, and **mobile**.
-
-**Web** is kind of two surfaces, as we have the public facing "app.t3.codes" as well as locally hosting the web app through the `npx t3` command. Both need to be supported by all new features where reasonable.
-
-**Desktop** is the main surface most users install first. It's a full Electron app that bundles the server runner as well. The desktop app can also be used as the host server, allowing remote connections from app.t3.codes or the mobile app.
-
-**Mobile** is a React Native app for both iOS and Android, available on the App Store and Google Play. The mobile app allows for connecting to any T3 Code server to control work remotely.
-
-## A note from Theo
-
-I like ambitious ideas, simple systems, and software that feels obvious. Do not preserve complexity just because it already exists. Do not introduce machinery because it looks architecturally impressive. Understand the real constraint, then fight for the smallest model that makes the correct behavior unsurprising.
-
-Channel both "measure twice, cut once" and "yagni". Fight scope creep. Try to honor the dev's intent in both a minimal and realistic fashion.
-
-The rest of this document is meant to help you navigate the codebase and make changes effectively. Think of these instructions less as "hard rules", more as "good defaults". The developer's preferences should be able to override anything here.
-
-Of note: Most T3 Code contributions will come from T3 Code itself, often controlled remotely. This means you should be careful about accessing data, killing dev servers, and other things that may damage the T3 Code instance that the contributor is using.
+Preserve unrelated work and runtime/data boundaries. Prefer the smallest complete change;
+measure performance before claiming improvement. Consider affected web, desktop, mobile,
+and remote paths without broadening an accepted feature into a platform rewrite.
 
 ## A small glossary
 
-We need to be on the same page with terminology. When communicating, use this language:
+Use the canonical [product aliases](docs/internals/glossary.md#product-names) and verify installed
+versions when describing behavior. When communicating, use this language:
 
-- **you** means the agent reading this file and changing T3 Code.
-- **we, us, and maintainers** mean Theo, Julius and the people building T3 Code. These are who you are talking to now.
+- **you** means the agent reading this file and changing this fork.
+- **we, us, and maintainers** refer to this fork's contributors; Cliff owns its product and acceptance decisions. Upstream maintainers retain their own authority over T3 Code.
 - **user** means the person using T3 Code to direct coding agents.
 - **agent** means the coding agent a user runs inside T3 Code. Depending on context, that may also include you.
 - **provider** means the agent runtime or harness T3 Code talks to, such as Codex, Claude, Cursor, or OpenCode.
@@ -59,7 +59,7 @@ We need to be on the same page with terminology. When communicating, use this la
 ## The three ways to hurt yourself
 
 1. **Killing by pattern.** Never `pkill -f`, `pgrep | kill`, or `kill` a PID you found by matching a name, path, or worktree string. Your own agent process has this worktree's path in its argv, and this machine runs several other dev servers at once. Kill only a PID you captured at spawn, or the owner of your port from `ss -H -ltnp` after confirming `/proc/<pid>/cwd` is your worktree.
-2. **Writing to the live install.** `~/.t3/userdata` is the developer's real T3 Code database, in use while you work. Reading it and copying from it are fine, and a good way to get real test data (see Test data). Never start a server against it, never open it read-write, never clean it up.
+2. **Writing to the live install.** `~/.t3/userdata` is the developer's real T3 Code database, in use while you work. Reading or copying personal live data is permitted only for an explicitly approved reproduction (see Test data). Never start a server against it, never open it read-write, never clean it up.
 3. **Baking in origins.** Never set `VITE_HTTP_URL` or `VITE_WS_URL` for dev. Dev is single-origin and Vite proxies `/api`, `/ws`, `/oauth`, and `/.well-known`. Setting them bakes localhost into the bundle and silently breaks every remote browser.
 
 ## Hit every surface
@@ -85,21 +85,17 @@ The most common defect in this repo is a change that works on the path you teste
 
 ## Test data
 
-An empty database is a bad test. Seed your worktree's `.t3` with a copy of real data instead of pointing at live state:
+Use meaningful synthetic fixtures by default, including realistic thread/activity/error
+states. Keep them in isolated worktree state; do not import personal prompts, conversations,
+credentials, or runtime databases merely to make a preview realistic.
 
-- Copy from `~/.t3/userdata` (the developer's real data, the most realistic test set) or `~/.t3/dev`. Worktree state lives at `<worktree>/.t3/userdata`.
-- Snapshot the database with `VACUUM INTO`, which is safe even while a server has the source open and yields one consistent file:
-
-  ```bash
-  mkdir -p .t3/userdata
-  rm -f .t3/userdata/state.sqlite*  # VACUUM INTO refuses to overwrite
-  bun -e "new (require('bun:sqlite').Database)(process.env.HOME + '/.t3/userdata/state.sqlite', { readonly: true }).run(\"VACUUM INTO '.t3/userdata/state.sqlite'\")"
-  ```
-
-  A plain `cp` is only safe when no server has the source open, and must bring the `-wal` and `-shm` siblings along. A live file copy is a corrupt copy.
-
-- Bring `secrets` and `settings.json` only if the flow under test needs them.
-- Copy in, never symlink. Data flows one way: into your sandbox, never back out.
+Only an explicitly approved reproduction may read or copy personal data. Minimize and
+redact the selected records; keep them outside Git and review uploads. Never point a test
+server at live state or open live state read-write. Snapshot an approved SQLite source
+read-only with `VACUUM INTO` to a fresh destination; do not overwrite existing test state.
+A plain live file copy is unsafe. Never symlink live data. Copy only explicitly needed
+settings/secrets within the approved scope; data flows into isolation, never back to live state.
+See the existing [fixture reference](.agents/skills/test-t3-app/references/sqlite-fixtures.md).
 
 ## Verifying
 
@@ -108,7 +104,7 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 - **Do not run repo-wide checks.** No `vp check`, no `vp run -r test`, no `vp run -r typecheck` unless I ask. CI owns the full suite.
 - Backend behavior changes ship with focused tests for that behavior.
 - The server is event-sourced and its async flows emit typed receipts. Wait on receipts and worker drains, never on sleeps or polling. A test that needs a timeout to pass is wrong.
-- Upon request, user-visible frontend changes should get one integrated pass in a real client: `test-t3-app` for web, `test-t3-mobile` for mobile. The primary agent does this once after integrating. Subagents do not launch their own dev servers. Ask permission before doing computer use or spinning up browsers.
+- Within accepted feature scope, user-visible frontend changes get an integrated real-client pass using `test-t3-app` or, when native mobile verification is in scope, `test-t3-mobile`. The planner coordinates one environment and identifies its verification owner; other agents do not independently launch duplicate servers. Mock acceptance includes the necessary scoped browser/runtime verification without a second routine approval. Dispatch must identify the checkout, isolated state, allowed surface/tools, and evidence required; it does not authorize unrelated browser or computer control. Without that authority, obtain it before launching verification.
 
 For authorized mobile verification, a missing or outdated native client is a build step, not a blocker. Run `node scripts/mobile-native-client.ts ensure <ios|android> <device-id>` on the simulator host before starting Metro. It checks the local Expo fingerprint and builds/installs when needed. See `test-t3-mobile` for the full workflow.
 
@@ -116,9 +112,9 @@ For authorized mobile verification, a missing or outdated native client is a bui
 
 - Never make a PR unless the developer explicitly asks you to do so.
 - Conventional commit titles, plain language: `fix(web): new threads no longer spike CPU`.
-- Body: the problem in a sentence or two, then how you fixed it. End with the model and harness that did the work.
+- Body: the problem, change, relevant validation and limitations. State actual model/harness assistance and who reviewed what; do not imply human or independent review that did not occur.
 - UI changes need before/after images. Motion or timing needs a short video.
-- Upload PR evidence to GitHub. Never commit PR-only screenshots or assets such as `.github/pr-assets/`.
+- Within explicitly authorized PR/review sharing scope, upload sanitized evidence to GitHub. Never commit PR-only screenshots or assets such as `.github/pr-assets/`.
 - One concern per PR. If the description says "also", split it.
 - When babysitting: poll checks and comments newer than the last push, verify each bot finding against the source, fix real ones, dismiss false positives with a written reason. Stay quiet when nothing is new. Stop when the bots are green on the latest commit.
 
@@ -136,9 +132,13 @@ Most code changes do not need an internal documentation change. Agents can read 
 
 ## Plans and work artifacts
 
+- Durable behavior and acceptance contracts belong in [`docs/specs/`](docs/specs/README.md). Record accepted scope, exclusions, failure states, scenarios, checks, and accepted mock reference there; link from the issue and planner continuity rather than copying checklists. This is distinct from temporary implementation planning.
+- Use the verified development baseline named in the planner's dispatch, with its branch/ref and commit recorded. Start each new feature iteration on a new branch from that baseline; do not assume `main` is latest. Verify physical checkout, HEAD, and dirty state, preserving unrelated work. A docs-only dispatch may name an existing branch.
+
 - Do not commit implementation plans, research notes, or agent scratch files. Keep temporary working material outside the worktree. `.plans/` is gitignored only as a safety net for legacy tooling.
-- Track active maintainer work in the GitHub issue or project item that owns it. External proposals follow `CONTRIBUTING.md` and belong in Ideas discussions.
-- A merged PR is the implementation record. Close or update its tracking item when the work lands; do not preserve a second checklist in the repository.
+- Finish builder packaging and assigned delivery before archival; preserve the tested revision, package and handoff. Installation must use the exact verified build with data/configuration and rollback preserved.
+- Track active maintainer work in the GitHub issue or project item that owns it. Follow `CONTRIBUTING.md`; do not create public tracking artifacts without authorization.
+- A merged PR is the implementation record. Close or update its tracking item when the work lands; do not preserve a duplicate implementation checklist. Keep the durable behavior spec current when accepted behavior changes.
 
 ## How it works
 
@@ -165,5 +165,5 @@ Full glossary with file links: `docs/internals/glossary.md`
 
 ## Additional tips
 
-- Don't verify with browsers or computer use unless the user explicitly agrees or requests it.
+- Browser/computer use stays within explicit task authority, including the accepted feature verification scope above; ask only for a material expansion.
 - Security is important, but should not be over-indexed on, especially for dev mode/maintainer-only features.

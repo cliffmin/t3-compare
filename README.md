@@ -93,8 +93,10 @@ remote connection mode. Native mobile comparison parity is not claimed. Comparis
 preferences are client-local and can be lost when site data is cleared. Shared conversations
 use completed answers; availability and context limits remain visible.
 
-Compare.21 includes saved shared-draft reload repair, native aggregate comparison actions,
-consolidated worktree-deletion consent and refined Compare controls.
+Compare.22 includes saved shared-draft reload repair, native aggregate comparison actions,
+consolidated worktree-deletion consent and refined Compare controls. It also restores the
+visible provider picker when Compare is enabled and reconciles a completed source turn whose
+local launch state remained pending.
 Its macOS arm64 package was locally verified, installed and launched; owner working-app
 acceptance and public-release approval remain pending. No passing hosted CI run is
 claimed by this document. [Roadmap and limits](docs/roadmap.md) ·

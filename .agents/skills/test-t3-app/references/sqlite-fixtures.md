@@ -2,6 +2,12 @@
 
 Load this reference only when inspecting or seeding local T3 state directly.
 
+Use synthetic records by default. Read or copy personal runtime data only for an explicitly
+approved reproduction, minimized and sanitized, outside Git and review uploads. Never use
+the live database as a test runtime or open it read-write. For an approved snapshot, open
+the source read-only and use `VACUUM INTO` to a fresh isolated destination; do not overwrite
+existing state or symlink live data. Credentials are not general-purpose fixture content.
+
 ## Select the correct database
 
 When `--base-dir` or `--home-dir` is explicit, runtime state lives under `<base-dir>/userdata` and the database path is `<base-dir>/userdata/state.sqlite`. The `<base-dir>/dev` state directory is only the fallback for an implicit development home, preventing an ordinary `vp run dev` from touching production state.

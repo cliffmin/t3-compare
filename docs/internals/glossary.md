@@ -1,7 +1,17 @@
 # Glossary
 
-Terms whose meaning matters across T3 Code. Architecture and lifecycle constraints belong in the
-[overview](./overview.md), not in these definitions.
+Terms whose meaning matters across T3 Compare and its T3 Code foundation. Architecture and lifecycle
+constraints belong in the [overview](./overview.md), not in these definitions.
+
+## Product names
+
+| Term | Meaning |
+| --- | --- |
+| t3 | The original upstream T3 Code application, shown as **t3code (alpha)** in the owner's macOS Dock; the reference for native behavior and UI. |
+| compare | The currently installed T3 Compare fork/build. |
+
+These names identify products, not fixed revisions. Verify the installed version and source
+checkout before reproducing behavior or reporting a change.
 
 ## Workspace and conversation
 

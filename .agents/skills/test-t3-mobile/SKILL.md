@@ -5,6 +5,14 @@ description: Test T3 Code's native iOS and Android app through its Device panel 
 
 # Test T3 Mobile
 
+## Authority
+
+Native mobile verification must be in the accepted feature scope and named in the
+planner's dispatch, including device, checkout, isolated state, and verification owner.
+No second routine approval is required within that scope. Web verification or a
+documentation-only task does not authorize native builds, installs, or device control.
+Existing device-tool requirements below still apply.
+
 ## Open the device
 
 Call `device_list`, then `device_open` with the selected host and device IDs.
@@ -22,7 +30,8 @@ repository root, retain its terminal session, and read the actual backend port
 from the dev-runner output. Use the worktree's ignored `.t3` state. Never run
 against `~/.t3/userdata`. The Browser panel is not required for this workflow.
 
-Test with meaningful project and thread data. Read the shared
+Test with meaningful synthetic project and thread data by default. Personal data requires
+an explicitly approved, minimized reproduction. Read the shared
 [SQLite fixture reference](../test-t3-app/references/sqlite-fixtures.md) only
 when inspecting or seeding SQLite. Stop the test server before fixture writes.
 
@@ -60,6 +69,8 @@ through AgentDevice. For a backend on the device host, use
 on Android. For a remote backend, use its reachable origin.
 
 Confirm the intended projects appear, exercise the affected flow, and capture
-evidence. Retain the app and environment while iterating. At teardown, remove
+evidence with the tested revision and limitations. Fixture rendering does not prove
+backend behavior or owner acceptance. Retain the app and environment while iterating.
+At teardown, remove
 the disposable connection, close the AgentDevice session, call `device_close`,
 and stop only your backend and Metro processes.
