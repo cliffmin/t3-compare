@@ -8,12 +8,21 @@ import { useComposerFocusState } from "./useComposerFocusState";
 let root: Root;
 let composer: ReturnType<typeof useComposerFocusState>;
 let isResting: boolean;
+let frameId = 0;
+const frames = new Map<number, FrameRequestCallback>();
+function flushFrames() {
+  for (const [id, callback] of frames) {
+    frames.delete(id);
+    callback(0);
+  }
+}
 
-function ComposerProbe() {
-  const state = useComposerFocusState();
+function ComposerProbe({ comparison = false }: { comparison?: boolean }) {
+  const state = useComposerFocusState(comparison);
   useLayoutEffect(() => {
     composer = state;
     isResting = shouldUseRestingComposerLayout({
+      ...(comparison ? { comparisonFocused: state.isComposerFocused } : {}),
       isExistingThread: true,
       isMobileViewport: false,
       isScrollCollapsed: state.isComposerScrollCollapsed,
@@ -26,6 +35,7 @@ function ComposerProbe() {
 }
 
 beforeEach(async () => {
+  frames.clear();
   // The probe has no DOM output, but ReactDOM needs an event target.
   const document = {
     nodeType: 9,
@@ -41,7 +51,18 @@ beforeEach(async () => {
     removeEventListener() {},
   };
   vi.stubGlobal("document", document);
-  vi.stubGlobal("window", { document, HTMLIFrameElement: EventTarget });
+  vi.stubGlobal(
+    "window",
+    Object.assign(new EventTarget(), {
+      document,
+      HTMLIFrameElement: EventTarget,
+      requestAnimationFrame: (callback: FrameRequestCallback) => {
+        frames.set(++frameId, callback);
+        return frameId;
+      },
+      cancelAnimationFrame: (id: number) => frames.delete(id),
+    }),
+  );
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   root = createRoot(container as unknown as HTMLElement);
   await act(() => root.render(<ComposerProbe />));
@@ -78,5 +99,51 @@ describe("composer focus state", () => {
     await act(() => composer.restoreAfterTimelineReachedEnd());
     expect(isResting).toBe(false);
     expect(composer.isComposerFocused).toBe(false);
+  });
+});
+
+describe("comparison composer focus ownership", () => {
+  it("starts resting and returns to rest after interacting with a timeline or another composer", async () => {
+    await act(() => root.render(<ComposerProbe comparison />));
+    expect(isResting).toBe(true);
+    const editor = new Event("focusin");
+    await act(async () => {
+      window.dispatchEvent(editor);
+      // Browser dispatch permits microtasks between native capture listeners.
+      await Promise.resolve();
+      composer.markOwnedEvent(editor);
+      flushFrames();
+    });
+    expect(isResting).toBe(false);
+    await act(async () => {
+      window.dispatchEvent(new Event("pointerdown"));
+      flushFrames();
+    });
+    expect(isResting).toBe(true);
+  });
+
+  it("keeps its own portal interaction expanded but releases ownership for another menu", async () => {
+    await act(() => root.render(<ComposerProbe comparison />));
+    const pointer = new Event("pointerdown");
+    const focus = new Event("focusin");
+    await act(async () => {
+      window.dispatchEvent(pointer);
+      composer.markOwnedEvent(pointer);
+      window.dispatchEvent(focus);
+      composer.markOwnedEvent(focus);
+      flushFrames();
+    });
+    expect(isResting).toBe(false);
+    await act(async () => {
+      window.dispatchEvent(new Event("focusin"));
+      flushFrames();
+    });
+    expect(isResting).toBe(true);
+  });
+
+  it("does not expand on timeline end restoration", async () => {
+    await act(() => root.render(<ComposerProbe comparison />));
+    await act(() => composer.restoreAfterTimelineReachedEnd());
+    expect(isResting).toBe(true);
   });
 });

@@ -37,7 +37,7 @@ import { Tooltip, TooltipTrigger, TooltipPopup } from "./ui/tooltip";
 import { SidebarInset, SidebarTrigger } from "./ui/sidebar";
 
 export function CompareView({ run }: { run: CompareRun }) {
-  const [activePane, setActivePane] = useState<string>("follow-up");
+  const [activePane, setActivePane] = useState<string | null>(null);
   const configs = useAtomValue(environmentServerConfigsAtom);
   const settings = useEnvironmentSettings(run.environmentId);
   const providers = useMemo(

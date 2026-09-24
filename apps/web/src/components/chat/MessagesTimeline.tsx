@@ -461,6 +461,7 @@ interface MessagesTimelineProps {
    * scroll-mode refs whenever the user drifts near the bottom.
    */
   liveFollowEnabled: boolean;
+  embeddedComparison?: boolean;
   onIsAtEndChange: (isAtEnd: boolean) => void;
   /**
    * Whether the real rows extend past the viewport above the composer.
@@ -526,6 +527,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   contentInsetEndAdjustment,
   allowScrollChaining = false,
   liveFollowEnabled,
+  embeddedComparison = false,
   onIsAtEndChange,
   onContentOverflowChange,
   onToolOutputCollapsedAtEnd,
@@ -676,10 +678,20 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const maintainVisibleContentPosition = useMemo(
     () => ({
       data: true,
-      size: true,
+      // Near the end of a tall streamed answer, Legend anchors the first
+      // fully visible row (often Thinking). Its movement would drag a reader
+      // who scrolled up. Keep their offset through stream growth; retain data
+      // anchoring, explicit disclosures, and normal sizing after completion.
+      size: !embeddedComparison || !isWorking || liveFollowEnabled || disclosureToggleSettling,
       shouldRestorePosition: shouldRestoreVisibleContentPosition,
     }),
-    [shouldRestoreVisibleContentPosition],
+    [
+      embeddedComparison,
+      isWorking,
+      liveFollowEnabled,
+      disclosureToggleSettling,
+      shouldRestoreVisibleContentPosition,
+    ],
   );
 
   const onToggleTurnFold = useCallback(
@@ -1323,7 +1335,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                 ? false
                 : maintainVisibleContentPosition
             }
-            maintainScrollAtEndThreshold={1}
+            // Compare mounts concurrent streaming panes. A first large batch
+            // can exceed one viewport before Legend pins the initial edge.
+            // Its proximity gate must agree with our explicit follow state;
+            // a real navigation gesture still disables maintenance above.
+            maintainScrollAtEndThreshold={
+              embeddedComparison && liveFollowEnabled ? Number.MAX_SAFE_INTEGER : 1
+            }
             onScroll={handleScroll}
             onItemSizeChanged={reportContentOverflow}
             className={cn(

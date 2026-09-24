@@ -78,6 +78,24 @@ describe("shouldUseCompactComposerPrimaryActions", () => {
 });
 
 describe("resolveComposerTimelineInset", () => {
+  it("reserves only the compact empty expansion in Compare and retains taller drafts", () => {
+    expect(
+      resolveComposerTimelineInset({
+        currentInset: 0,
+        overlayHeight: 60,
+        isResting: true,
+        embeddedComparison: true,
+      }),
+    ).toBe(112);
+    expect(
+      resolveComposerTimelineInset({
+        currentInset: 200,
+        overlayHeight: 60,
+        isResting: true,
+        embeddedComparison: true,
+      }),
+    ).toBe(200);
+  });
   it("follows the expanded overlay height", () => {
     expect(
       resolveComposerTimelineInset({ currentInset: 160, overlayHeight: 140, isResting: false }),
@@ -447,5 +465,37 @@ describe("resolveScrollToEndClearance", () => {
         overlayHeight,
       );
     }
+  });
+});
+
+describe("comparison resting presentation", () => {
+  const draft = {
+    isExistingThread: false,
+    isMobileViewport: false,
+    isScrollCollapsed: false,
+    hasExpandedChrome: false,
+    hasMultilinePrompt: true,
+    timelineOverflows: false,
+  };
+  it("rests unfocused draft and multiline previews without requiring timeline overflow", () => {
+    expect(shouldUseRestingComposerLayout({ ...draft, comparisonFocused: false })).toBe(true);
+    expect(
+      shouldUseRestingComposerLayout({
+        ...draft,
+        isMobileViewport: true,
+        comparisonFocused: false,
+      }),
+    ).toBe(true);
+    expect(shouldUseRestingComposerLayout({ ...draft, comparisonFocused: true })).toBe(false);
+  });
+  it("keeps required expanded chrome available and leaves the ordinary policy unchanged", () => {
+    expect(
+      shouldUseRestingComposerLayout({
+        ...draft,
+        comparisonFocused: false,
+        hasExpandedChrome: true,
+      }),
+    ).toBe(false);
+    expect(shouldUseRestingComposerLayout(draft)).toBe(false);
   });
 });

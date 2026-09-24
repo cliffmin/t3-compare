@@ -1501,6 +1501,7 @@ export default function ChatView(props: ChatViewProps) {
     forceExpandedMobileComposer = false,
     embedded,
   } = props;
+  const isEmbeddedComparison = Boolean(embedded);
   const embeddedRef = useRef(embedded);
   embeddedRef.current = embedded;
   const ownsInput = useCallback(() => embeddedRef.current?.active ?? true, []);
@@ -5447,6 +5448,10 @@ export default function ChatView(props: ChatViewProps) {
     timelineEntries,
     timelineLiveFollowEnabled,
   ]);
+  // Embedded shells can mount before the list exists; retry when content or
+  // provider work makes the native timeline appear, including history loads.
+  const embeddedTimelineContentCount = embedded ? timelineEntries.length : 0;
+  const embeddedTimelineWorking = Boolean(embedded && isWorking);
   useEffect(() => {
     let removeListeners: (() => void) | null = null;
     let frame: number | null = null;
@@ -5597,7 +5602,14 @@ export default function ChatView(props: ChatViewProps) {
       }
       removeListeners?.();
     };
-  }, [activeThread?.id, isTimelineAtLogicalEnd, timelineRealContentOverflowsViewport, ownsInput]);
+  }, [
+    activeThread?.id,
+    embeddedTimelineContentCount,
+    embeddedTimelineWorking,
+    isTimelineAtLogicalEnd,
+    timelineRealContentOverflowsViewport,
+    ownsInput,
+  ]);
 
   const onTimelineAnchorReady = useCallback((messageId: MessageId, anchorIndex: number) => {
     // Anchored-end space can be remeasured when the turn completes. Once the
@@ -5753,14 +5765,14 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeThread?.id, routeThreadKey]);
 
   useEffect(() => {
-    if (!activeThread?.id || terminalUiState.terminalOpen) return;
+    if (embedded || !activeThread?.id || terminalUiState.terminalOpen) return;
     const frame = window.requestAnimationFrame(() => {
       focusComposer();
     });
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [activeThread?.id, focusComposer, terminalUiState.terminalOpen]);
+  }, [activeThread?.id, embedded, focusComposer, terminalUiState.terminalOpen]);
 
   // Tabbing back into the app lands focus wherever it last was, often the right panel or the
   // body. Put it in the composer unless something that takes typing already holds it. The
@@ -5768,7 +5780,7 @@ export default function ChatView(props: ChatViewProps) {
   // terminal is a surface and is recognized by the predicate instead. Mobile is left alone so
   // returning to the app does not raise the keyboard.
   useEffect(() => {
-    if (!activeThread?.id || terminalUiState.terminalOpen || isMobileViewport) return;
+    if (embedded || !activeThread?.id || terminalUiState.terminalOpen || isMobileViewport) return;
     let frame: number | null = null;
     const onWindowFocus = () => {
       if (frame !== null) window.cancelAnimationFrame(frame);
@@ -5787,7 +5799,7 @@ export default function ChatView(props: ChatViewProps) {
       window.removeEventListener("focus", onWindowFocus);
       if (frame !== null) window.cancelAnimationFrame(frame);
     };
-  }, [activeThread?.id, focusComposer, isMobileViewport, terminalUiState.terminalOpen]);
+  }, [activeThread?.id, embedded, focusComposer, isMobileViewport, terminalUiState.terminalOpen]);
 
   useEffect(() => {
     if (!activeThread?.id) return;
@@ -5928,6 +5940,7 @@ export default function ChatView(props: ChatViewProps) {
         currentInset: composerTimelineInsetRef.current,
         overlayHeight: nextHeight,
         isResting: composerRestingRef.current,
+        embeddedComparison: isEmbeddedComparison,
       });
       if (composerTimelineInsetRef.current !== nextInset) {
         composerTimelineInsetRef.current = nextInset;
@@ -5935,7 +5948,7 @@ export default function ChatView(props: ChatViewProps) {
       }
       publishScrollToEndClearance(nextHeight);
     },
-    [publishScrollToEndClearance],
+    [isEmbeddedComparison, publishScrollToEndClearance],
   );
   // The composer reports its resting flag from a layout effect, which runs
   // before this component's own layout effects and before any resize
@@ -9896,7 +9909,7 @@ export default function ChatView(props: ChatViewProps) {
         "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background",
         embedded &&
           !embedded.followUp &&
-          "[container-type:size] [&_.composer-tiptap]:max-h-[max(4.375rem,min(12.5rem,calc(100cqh-12rem)))]",
+          "[container-type:size] [&_[data-chat-composer-resting=false]_.composer-tiptap]:max-h-[max(4.375rem,min(12.5rem,calc(100cqh-12rem)))]",
       )}
       onPointerDownCapture={embedded?.onActivate}
       onFocusCapture={embedded?.onActivate}
@@ -10036,94 +10049,99 @@ export default function ChatView(props: ChatViewProps) {
               )}
             >
               {/* Messages — LegendList handles virtualization and scrolling internally */}
-              <MessagesTimeline
-                allowScrollChaining={Boolean(embedded && !embedded.followUp)}
-                hiddenUserMessageId={embedded?.hiddenUserMessageId}
-                citationRequest={paintOnlyDisplayedTimeline ? null : citationRequest}
-                citationHistoryLoading={threadDetailLoading}
-                {...(!paintOnlyDisplayedTimeline
-                  ? {
-                      onCiteAssistantText: citeAssistantText,
-                      agentPanelModel,
-                      onOpenAgents: addAgentsSurface,
-                      onUseArtifactTemplate: useArtifactTemplate,
-                    }
-                  : {})}
-                isWorking={!paintOnlyDisplayedTimeline && isWorking}
-                isPreparingWorktree={!paintOnlyDisplayedTimeline && isPreparingWorktree}
-                isCompacting={!paintOnlyDisplayedTimeline && isCompacting}
-                activeTurnStartedAt={paintOnlyDisplayedTimeline ? null : activeWorkStartedAt}
-                worktreeSetup={paintOnlyDisplayedTimeline ? null : worktreeSetup}
-                onCancelWorktreeSetup={onCancelWorktreeSetup}
-                {...(draftId ? { onWorktreeSetupWorkLocally } : {})}
-                {...(onOpenWorktreeSetupTerminal ? { onOpenWorktreeSetupTerminal } : {})}
-                listRef={legendListRef}
-                timelineEntries={displayedTimeline.entries}
-                latestTurn={paintOnlyDisplayedTimeline ? null : activeLatestTurn}
-                runningTurnId={paintOnlyDisplayedTimeline ? null : activeRunningTurnId}
-                turnDiffSummaries={
-                  paintOnlyDisplayedTimeline
-                    ? EMPTY_HELD_TURN_DIFF_SUMMARIES
-                    : activeThread.checkpoints
-                }
-                activeThreadEnvironmentId={
-                  displayedThreadRef?.environmentId ?? activeThread.environmentId
-                }
-                routeThreadKey={displayedTimelineKey}
-                displayThreadKey={displayedTimelineKey}
-                onOpenTurnDiff={paintOnlyDisplayedTimeline ? noopHeldTurnDiff : onOpenTurnDiff}
-                supportsConversationRollback={
-                  !paintOnlyDisplayedTimeline && supportsConversationRollback
-                }
-                onRevertToTurnCount={
-                  paintOnlyDisplayedTimeline ? noopHeldRevert : onRevertTimelineTurn
-                }
-                isRevertingCheckpoint={!paintOnlyDisplayedTimeline && isRevertingCheckpoint}
-                onImageExpand={onExpandTimelineImage}
-                onFileOpen={paintOnlyDisplayedTimeline ? noopHeldAttachment : openFileAttachment}
-                onFileDownload={
-                  paintOnlyDisplayedTimeline ? noopHeldAttachment : downloadFileAttachment
-                }
-                markdownCwd={
-                  paintOnlyDisplayedTimeline
-                    ? (heldPaintContext?.markdownCwd ?? undefined)
-                    : (gitCwd ?? undefined)
-                }
-                resolvedTheme={resolvedTheme}
-                timestampFormat={timestampFormat}
-                workspaceRoot={
-                  paintOnlyDisplayedTimeline
-                    ? (heldPaintContext?.workspaceRoot ?? undefined)
-                    : activeWorkspaceRoot
-                }
-                skills={
-                  activeProviderStatus
-                    ? resolveProviderSkillsForCwd(activeProviderStatus, gitCwd)
-                    : EMPTY_PROVIDER_SKILLS
-                }
-                anchorMessageId={paintOnlyDisplayedTimeline ? null : timelineAnchorMessageId}
-                onAnchorReady={onTimelineAnchorReady}
-                contentInsetEndAdjustment={embedded?.followUp ? 0 : composerTimelineInset}
-                liveFollowEnabled={!paintOnlyDisplayedTimeline && timelineLiveFollowEnabled}
-                onIsAtEndChange={onIsAtEndChange}
-                onContentOverflowChange={setTimelineOverflows}
-                onToolOutputCollapsedAtEnd={onToolOutputCollapsedAtEnd}
-                onManualNavigation={cancelTimelineLiveFollowForUserNavigation}
-                cancelPositionRestoreRef={cancelPositionRestoreRef}
-                hideEmptyPlaceholder={
-                  Boolean(embedded?.followUp) || isDraftHeroState || threadDetailLoading
-                }
-                topFadeEnabled={!hasTimelineTopBanner}
-                loadEarlier={paintOnlyDisplayedTimeline ? null : loadEarlierTurns}
-                queuedMessages={paintOnlyDisplayedTimeline ? EMPTY_QUEUED_MESSAGES : queuedMessages}
-                onSteerQueuedMessage={onSteerQueuedMessage}
-                steerQueuedMessageShortcutLabel={shortcutLabelForCommand(
-                  keybindings,
-                  "thread.steerQueuedMessage",
-                  { context: { terminalFocus: false } },
-                )}
-                onRemoveQueuedMessage={onRemoveQueuedMessage}
-              />
+              {(!embedded || embedded.followUp || composerTimelineInset > 0) && (
+                <MessagesTimeline
+                  embeddedComparison={isEmbeddedComparison}
+                  allowScrollChaining={Boolean(embedded && !embedded.followUp)}
+                  hiddenUserMessageId={embedded?.hiddenUserMessageId}
+                  citationRequest={paintOnlyDisplayedTimeline ? null : citationRequest}
+                  citationHistoryLoading={threadDetailLoading}
+                  {...(!paintOnlyDisplayedTimeline
+                    ? {
+                        onCiteAssistantText: citeAssistantText,
+                        agentPanelModel,
+                        onOpenAgents: addAgentsSurface,
+                        onUseArtifactTemplate: useArtifactTemplate,
+                      }
+                    : {})}
+                  isWorking={!paintOnlyDisplayedTimeline && isWorking}
+                  isPreparingWorktree={!paintOnlyDisplayedTimeline && isPreparingWorktree}
+                  isCompacting={!paintOnlyDisplayedTimeline && isCompacting}
+                  activeTurnStartedAt={paintOnlyDisplayedTimeline ? null : activeWorkStartedAt}
+                  worktreeSetup={paintOnlyDisplayedTimeline ? null : worktreeSetup}
+                  onCancelWorktreeSetup={onCancelWorktreeSetup}
+                  {...(draftId ? { onWorktreeSetupWorkLocally } : {})}
+                  {...(onOpenWorktreeSetupTerminal ? { onOpenWorktreeSetupTerminal } : {})}
+                  listRef={legendListRef}
+                  timelineEntries={displayedTimeline.entries}
+                  latestTurn={paintOnlyDisplayedTimeline ? null : activeLatestTurn}
+                  runningTurnId={paintOnlyDisplayedTimeline ? null : activeRunningTurnId}
+                  turnDiffSummaries={
+                    paintOnlyDisplayedTimeline
+                      ? EMPTY_HELD_TURN_DIFF_SUMMARIES
+                      : activeThread.checkpoints
+                  }
+                  activeThreadEnvironmentId={
+                    displayedThreadRef?.environmentId ?? activeThread.environmentId
+                  }
+                  routeThreadKey={displayedTimelineKey}
+                  displayThreadKey={displayedTimelineKey}
+                  onOpenTurnDiff={paintOnlyDisplayedTimeline ? noopHeldTurnDiff : onOpenTurnDiff}
+                  supportsConversationRollback={
+                    !paintOnlyDisplayedTimeline && supportsConversationRollback
+                  }
+                  onRevertToTurnCount={
+                    paintOnlyDisplayedTimeline ? noopHeldRevert : onRevertTimelineTurn
+                  }
+                  isRevertingCheckpoint={!paintOnlyDisplayedTimeline && isRevertingCheckpoint}
+                  onImageExpand={onExpandTimelineImage}
+                  onFileOpen={paintOnlyDisplayedTimeline ? noopHeldAttachment : openFileAttachment}
+                  onFileDownload={
+                    paintOnlyDisplayedTimeline ? noopHeldAttachment : downloadFileAttachment
+                  }
+                  markdownCwd={
+                    paintOnlyDisplayedTimeline
+                      ? (heldPaintContext?.markdownCwd ?? undefined)
+                      : (gitCwd ?? undefined)
+                  }
+                  resolvedTheme={resolvedTheme}
+                  timestampFormat={timestampFormat}
+                  workspaceRoot={
+                    paintOnlyDisplayedTimeline
+                      ? (heldPaintContext?.workspaceRoot ?? undefined)
+                      : activeWorkspaceRoot
+                  }
+                  skills={
+                    activeProviderStatus
+                      ? resolveProviderSkillsForCwd(activeProviderStatus, gitCwd)
+                      : EMPTY_PROVIDER_SKILLS
+                  }
+                  anchorMessageId={paintOnlyDisplayedTimeline ? null : timelineAnchorMessageId}
+                  onAnchorReady={onTimelineAnchorReady}
+                  contentInsetEndAdjustment={embedded?.followUp ? 0 : composerTimelineInset}
+                  liveFollowEnabled={!paintOnlyDisplayedTimeline && timelineLiveFollowEnabled}
+                  onIsAtEndChange={onIsAtEndChange}
+                  onContentOverflowChange={setTimelineOverflows}
+                  onToolOutputCollapsedAtEnd={onToolOutputCollapsedAtEnd}
+                  onManualNavigation={cancelTimelineLiveFollowForUserNavigation}
+                  cancelPositionRestoreRef={cancelPositionRestoreRef}
+                  hideEmptyPlaceholder={
+                    Boolean(embedded?.followUp) || isDraftHeroState || threadDetailLoading
+                  }
+                  topFadeEnabled={!hasTimelineTopBanner}
+                  loadEarlier={paintOnlyDisplayedTimeline ? null : loadEarlierTurns}
+                  queuedMessages={
+                    paintOnlyDisplayedTimeline ? EMPTY_QUEUED_MESSAGES : queuedMessages
+                  }
+                  onSteerQueuedMessage={onSteerQueuedMessage}
+                  steerQueuedMessageShortcutLabel={shortcutLabelForCommand(
+                    keybindings,
+                    "thread.steerQueuedMessage",
+                    { context: { terminalFocus: false } },
+                  )}
+                  onRemoveQueuedMessage={onRemoveQueuedMessage}
+                />
+              )}
 
               {/* scroll to end pill — shown when user has scrolled away from the live edge */}
               {showScrollToBottom && (
@@ -10192,6 +10210,7 @@ export default function ChatView(props: ChatViewProps) {
                           <ChatComposer
                             multipleModelSelections={embedded ? null : multipleModelSelections}
                             ownsInput={ownsInput}
+                            embeddedComparison={isEmbeddedComparison}
                             preserveExactSelection={comparisonThread}
                             placeholder={
                               embedded?.followUp

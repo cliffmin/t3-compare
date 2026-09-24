@@ -1326,6 +1326,7 @@ export interface ChatComposerProps {
   draftId: DraftId | null;
   multipleModelSelections: ReadonlyArray<ModelSelection> | null;
   supportsMultipleModels: boolean;
+  embeddedComparison?: boolean;
   onMultipleModelSelectionsChange: React.Dispatch<
     React.SetStateAction<ReadonlyArray<ModelSelection> | null>
   >;
@@ -2137,13 +2138,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
   const [isComposerModelPickerOpen, setIsComposerModelPickerOpen] = useState(false);
   const isMobileViewport = useMediaQuery("max-sm");
+  const composerFormRef = useRef<HTMLFormElement>(null);
   const {
+    markOwnedEvent,
     isComposerFocused,
     setIsComposerFocused,
     isComposerScrollCollapsed,
     setIsComposerScrollCollapsed,
     restoreAfterTimelineReachedEnd,
-  } = useComposerFocusState();
+  } = useComposerFocusState(props.embeddedComparison, composerFormRef);
   const [composerSubmissionError, setComposerSubmissionError] = useState<string | null>(null);
   const [providerInputSubmissionError, setProviderInputSubmissionError] = useState<string | null>(
     null,
@@ -2160,7 +2163,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   const isComposerCollapsedMobile =
-    isMobileViewport && !forceExpandedOnMobile && !isComposerFocused && !hasMultilinePrompt;
+    !props.embeddedComparison &&
+    isMobileViewport &&
+    !forceExpandedOnMobile &&
+    !isComposerFocused &&
+    !hasMultilinePrompt;
 
   // ------------------------------------------------------------------
   // Refs
@@ -2172,7 +2179,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     names: new Set(),
   });
   const attachmentInputRef = useRef<HTMLInputElement>(null);
-  const composerFormRef = useRef<HTMLFormElement>(null);
   const composerFooterControlsRef = useRef<HTMLDivElement>(null);
   const composerSurfaceRef = useRef<HTMLDivElement>(null);
   const providerInputRejectedRef = useRef(false);
@@ -4751,6 +4757,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     providerInputSubmissionError !== null ||
     hasImageAttachmentAttention;
   const isComposerResting = shouldUseRestingComposerLayout({
+    ...(props.embeddedComparison ? { comparisonFocused: isComposerFocused } : {}),
     isExistingThread: routeKind === "server" && activeThreadId !== null,
     isMobileViewport,
     isScrollCollapsed: isComposerScrollCollapsed,
@@ -6236,6 +6243,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       ref={composerFormRef}
       onSubmit={submitComposer}
       onPointerDownCapture={(event) => {
+        if (!isInsideCollapsedComposerControls(event.target)) markOwnedEvent(event.nativeEvent);
         const target = event.target;
         if (isInsideRestingComposerControlScope(target)) return;
         if (isInsideCollapsedComposerControls(target)) return;
@@ -6256,6 +6264,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         }
       }}
       onFocusCapture={(event) => {
+        if (!isInsideCollapsedComposerControls(event.target)) markOwnedEvent(event.nativeEvent);
         const activeElement = event.target;
         if (composerControlsInStrip && isInsideRestingComposerControlScope(activeElement)) {
           return;
@@ -6498,6 +6507,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           <div
             ref={composerSurfaceRef}
             data-chat-composer-surface="true"
+            data-chat-composer-resting={isComposerResting ? "true" : "false"}
             data-chat-composer-mobile-collapsed={isComposerCollapsedMobile ? "true" : "false"}
             className={cn(
               "rounded-[20px] transition-[background-color] duration-200",
@@ -7010,8 +7020,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     containerClassName={cn(isComposerResting && "min-w-0 flex-1")}
                     className={cn(
                       showMobilePendingAnswerActions && "max-sm:pb-11",
+                      props.embeddedComparison && !isComposerResting && "min-h-7",
                       isComposerResting &&
                         "max-h-8 min-h-8 overflow-hidden whitespace-pre! leading-8",
+                      props.embeddedComparison &&
+                        isComposerResting &&
+                        "whitespace-nowrap! [&_p]:inline [&_p]:after:content-['_'] [&_br]:inline [&_br]:after:content-['_']",
                       isComposerApprovalState && "min-h-8",
                     )}
                     placeholderClassName={cn(

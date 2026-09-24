@@ -25,6 +25,8 @@ export function shouldUseCompactComposerFooter(
 
 export function shouldUseRestingComposerLayout(input: {
   isExistingThread: boolean;
+  /** Compare rests on focus ownership, including draft and multiline previews. */
+  comparisonFocused?: boolean;
   isMobileViewport: boolean;
   isScrollCollapsed: boolean;
   hasExpandedChrome: boolean;
@@ -32,6 +34,9 @@ export function shouldUseRestingComposerLayout(input: {
   /** Whether the timeline has more content than fits above the composer. */
   timelineOverflows: boolean;
 }): boolean {
+  if (input.comparisonFocused !== undefined) {
+    return !input.comparisonFocused && !input.hasExpandedChrome;
+  }
   // Multiline drafts stay readable. Resting only clamps a single prompt
   // line and overlays its actions; non-image attachment and context
   // rows keep their natural height above it while image previews move inline.
@@ -83,9 +88,12 @@ export function resolveComposerTimelineInset(input: {
   currentInset: number;
   overlayHeight: number;
   isResting: boolean;
+  embeddedComparison?: boolean;
 }): number {
+  // Compare's empty expanded editor is 28px instead of the native 70px.
+  const expansion = input.embeddedComparison ? 52 : COMPOSER_RESTING_EXPANSION_MIN_PX;
   return input.isResting
-    ? Math.max(input.currentInset, input.overlayHeight + COMPOSER_RESTING_EXPANSION_MIN_PX)
+    ? Math.max(input.currentInset, input.overlayHeight + expansion)
     : input.overlayHeight;
 }
 
