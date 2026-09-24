@@ -62,3 +62,19 @@ export function ensureComparisonFollowUpDraft(run: CompareRun, hasServerShell: b
     },
   }));
 }
+
+/** Identify owned unsent drafts for lifecycle actions without mounting their conversation. */
+export function hasUnsentComparisonFollowUpDraft(run: CompareRun, hasServerShell: boolean) {
+  if (hasServerShell || run.followUp?.pending || run.followUp?.deleted) return false;
+  const { draftId } = comparisonFollowUpDraftIdentity(run);
+  const draft = useComposerDraftStore.getState().getDraftSession(draftId);
+  if (!draft || draft.promotedTo) return false;
+  // Sidebar actions can run before the comparison mounts and repairs legacy
+  // colon-key hydration. Reuse that guarded repair only for an existing draft;
+  // creating one here would hide an unresolved missing server conversation.
+  ensureComparisonFollowUpDraft(run, false);
+  return comparisonFollowUpDraftReady(
+    run,
+    useComposerDraftStore.getState().getDraftSession(draftId),
+  );
+}

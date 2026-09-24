@@ -97,6 +97,123 @@ function mergeThread() {
 }
 
 describe("comparison snapshots", () => {
+  it("reconciles a lost launch receipt from the exact settled original turn, including already captured answers", () => {
+    const initial = run();
+    const pending = {
+      ...initial,
+      entries: initial.entries.map((entry, i) =>
+        i === 0
+          ? {
+              ...entry,
+              launch: "pending" as const,
+              initialMessageId: MessageId.make("user-one"),
+            }
+          : entry,
+      ),
+    };
+    const native = { ...thread(), pendingTurnStartMessageId: null };
+    const saved = captureComparisonThread(pending, native);
+    expect(saved.entries[0]?.launch).toBe("started");
+    const stuck = {
+      ...saved,
+      entries: saved.entries.map((entry, i) =>
+        i === 0 ? { ...entry, launch: "uncertain" as const } : entry,
+      ),
+    };
+    const recovered = captureComparisonThread(stuck, native);
+    expect(recovered.entries[0]?.launch).toBe("started");
+    expect(recovered.entries[0]?.original).toBe(stuck.entries[0]?.original);
+  });
+
+  it.each(["error", "interrupted"] as const)(
+    "records %s launch evidence without turning it into a successful answer",
+    (state) => {
+      const initial = run();
+      const pending = {
+        ...initial,
+        entries: initial.entries.map((entry, i) =>
+          i === 0
+            ? {
+                ...entry,
+                launch: "uncertain" as const,
+                initialMessageId: MessageId.make("user-one"),
+              }
+            : entry,
+        ),
+      };
+      const native = {
+        ...thread(),
+        pendingTurnStartMessageId: null,
+        latestTurn: { ...thread().latestTurn, state },
+      };
+      const saved = captureComparisonThread(pending, native);
+      expect(saved.entries[0]?.launch).toBe("started");
+      expect(saved.entries[0]?.original?.status).toBe(state);
+    },
+  );
+
+  it("keeps unresolved launch safety without exact settled original evidence", () => {
+    const initial = run();
+    const pending = {
+      ...initial,
+      entries: initial.entries.map((entry, i) =>
+        i === 0
+          ? {
+              ...entry,
+              launch: "pending" as const,
+              initialMessageId: MessageId.make("user-one"),
+            }
+          : entry,
+      ),
+    };
+    const native = { ...thread(), pendingTurnStartMessageId: null };
+    const missingIdentity = {
+      ...pending,
+      entries: pending.entries.map(({ initialMessageId: _initialMessageId, ...entry }) => entry),
+    };
+    expect(captureComparisonThread(missingIdentity, native).entries[0]?.launch).toBe("pending");
+    for (const sessionStatus of ["running", "starting"] as const) {
+      const active = {
+        ...native,
+        session: {
+          threadId: native.id,
+          status: sessionStatus,
+          providerName: "codex" as const,
+          runtimeMode: "full-access" as const,
+          activeTurnId: native.latestTurn.turnId,
+          lastError: null,
+          updatedAt: createdAt,
+        },
+      };
+      expect(captureComparisonThread(pending, active).entries[0]?.launch).toBe("pending");
+    }
+    for (const candidate of [
+      { ...native, id: ThreadId.make("unrelated") },
+      {
+        ...native,
+        messages: [message("user", "Other request", "other"), message("assistant", "Answer")],
+      },
+      { ...native, pendingTurnStartMessageId: MessageId.make("pending") },
+      { ...native, pendingTurnStartMessageId: undefined },
+      { ...native, latestTurn: { ...native.latestTurn, state: "running" as const } },
+      {
+        ...native,
+        messages: [
+          ...native.messages,
+          message("user", "Later request", "two"),
+          message("assistant", "Later answer", "two"),
+        ],
+      },
+      {
+        ...native,
+        messages: native.messages.map((m) =>
+          m.role === "assistant" ? { ...m, streaming: true } : m,
+        ),
+      },
+    ])
+      expect(captureComparisonThread(pending, candidate).entries[0]?.launch).toBe("pending");
+  });
+
   it("waits for terminal session settlement before freezing interrupted partial text", () => {
     const initial = run();
     const active = {

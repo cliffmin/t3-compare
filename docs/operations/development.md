@@ -116,7 +116,7 @@ upstream; it does not run for this fork. Fork CI does not verify Windows or desk
 
 `vp run knip:check` checks unused files and dependencies across the repo, then
 unused runtime exports in `apps/server`, `apps/desktop`, `apps/web`, and every internal package under
-`packages/`. CI enforces both checks.
+`packages/`. Upstream CI enforces both checks; this fork’s current CI does not run Knip.
 Exported types and Effect schemas are allowed without consumers. The schema preprocessor
 recognizes schema types, including aliases and schema classes; functions that create or decode
 schemas remain checked. Canonical Effect service construction APIs stay exported with an explicit

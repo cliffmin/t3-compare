@@ -28,7 +28,7 @@ import {
 } from "../comparisonActions.logic";
 import {
   comparisonFollowUpDraftIdentity,
-  comparisonFollowUpDraftReady,
+  hasUnsentComparisonFollowUpDraft,
 } from "../comparisonFollowUpDraft";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { releaseComposerDraftUploads } from "../lib/composerDraftUploads";
@@ -123,11 +123,9 @@ export function useComparisonActions(runId: string) {
     ];
     const latest = latestRun(runId);
     if (!latest) return null;
-    const draft = useComposerDraftStore
-      .getState()
-      .getDraftSession(comparisonFollowUpDraftIdentity(latest).draftId);
-    const unsent = Boolean(
-      draft && !draft.promotedTo && comparisonFollowUpDraftReady(latest, draft),
+    const unsent = hasUnsentComparisonFollowUpDraft(
+      latest,
+      shells.some((thread) => thread.id === latest.followUp?.threadId),
     );
     const members = resolveComparisonMembers(latest, shells, unsent);
     const cleanupCandidates = comparisonCleanupCandidatePaths(

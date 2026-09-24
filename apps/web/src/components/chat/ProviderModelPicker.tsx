@@ -52,6 +52,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   terminalOpen?: boolean;
   open?: boolean;
   handle?: React.ComponentProps<typeof Popover>["handle"];
+  triggerId?: string;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
   /** Aggregate settings can show a neutral value without claiming one provider is selected. */
@@ -212,6 +213,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       }}
     >
       <PopoverTrigger
+        id={props.triggerId}
         render={
           <ComposerControl
             aria-label={props.triggerAriaLabel ?? allModelNames}

@@ -43,7 +43,8 @@ export function ComparisonSnapshots({ run }: { run: CompareRun }) {
   return (
     <>
       {run.entries.map((entry) =>
-        entry.threadId && !entry.original ? (
+        entry.threadId &&
+        (!entry.original || entry.launch === "pending" || entry.launch === "uncertain") ? (
           <CaptureThread key={entry.threadId} run={run} threadId={entry.threadId} />
         ) : null,
       )}

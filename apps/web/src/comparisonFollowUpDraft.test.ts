@@ -1,3 +1,4 @@
+import { resolveComparisonMembers } from "./comparisonActions.logic";
 import { beforeEach, expect, it } from "vite-plus/test";
 import {
   CommandId,
@@ -18,6 +19,7 @@ import {
   comparisonFollowUpDraftIdentity,
   comparisonFollowUpDraftReady,
   ensureComparisonFollowUpDraft,
+  hasUnsentComparisonFollowUpDraft,
 } from "./comparisonFollowUpDraft";
 
 const run: CompareRun = {
@@ -131,6 +133,12 @@ it("leaves server, pending and promoted identities untouched without dispatch", 
   };
   ensureComparisonFollowUpDraft({ ...legacy, followUp: { ...legacy.followUp!, pending } }, false);
   expect(draft()).toBe(before);
+  expect(
+    hasUnsentComparisonFollowUpDraft(
+      { ...legacy, followUp: { ...legacy.followUp!, pending } },
+      false,
+    ),
+  ).toBe(false);
   const { draftId } = comparisonFollowUpDraftIdentity(legacy);
   useComposerDraftStore.setState((s) => ({
     draftThreadsByThreadKey: {
@@ -162,4 +170,48 @@ it("does not recreate an owned draft after confirmed shared-thread deletion", ()
   const deleted = { ...legacy, followUp: { ...legacy.followUp!, deleted: true } };
   ensureComparisonFollowUpDraft(deleted, false);
   expect(draft(deleted)).toBeNull();
+});
+
+it("resolves legacy sidebar membership after reload before opening the comparison", () => {
+  ensureComparisonFollowUpDraft(legacy, false);
+  const { draftId } = comparisonFollowUpDraftIdentity(legacy);
+  useComposerDraftStore.getState().setPrompt(draftId, "Preserved unsent instruction");
+  reload();
+  expect(comparisonFollowUpDraftReady(legacy, draft())).toBe(false);
+  const content = useComposerDraftStore.getState().draftsByThreadKey[draftId];
+  const members = resolveComparisonMembers(
+    legacy,
+    [],
+    hasUnsentComparisonFollowUpDraft(legacy, false),
+  );
+  expect(members.missing).toEqual([]);
+  expect(members.uncertain).toBe(false);
+  expect(useComposerDraftStore.getState().draftsByThreadKey[draftId]).toBe(content);
+  expect(content?.prompt).toBe("Preserved unsent instruction");
+});
+
+it("keeps missing, promoted, mismatched and server identities unresolved", () => {
+  expect(hasUnsentComparisonFollowUpDraft(legacy, false)).toBe(false);
+  expect(draft()).toBeNull();
+  ensureComparisonFollowUpDraft(legacy, false);
+  const { draftId } = comparisonFollowUpDraftIdentity(legacy);
+  const original = draft()!;
+  for (const changed of [
+    { ...original, promotedTo: scopeThreadRef(run.environmentId, legacy.followUp!.threadId) },
+    { ...original, environmentId: EnvironmentId.make("unrelated") },
+    { ...original, projectId: ProjectId.make("unrelated") },
+  ]) {
+    useComposerDraftStore.setState((state) => ({
+      draftThreadsByThreadKey: { ...state.draftThreadsByThreadKey, [draftId]: changed },
+    }));
+    expect(hasUnsentComparisonFollowUpDraft(legacy, false)).toBe(false);
+    expect(draft()).toBe(changed);
+    expect(resolveComparisonMembers(legacy, [], false).missing).toEqual([
+      legacy.followUp!.threadId,
+    ]);
+  }
+  useComposerDraftStore.setState((state) => ({
+    draftThreadsByThreadKey: { ...state.draftThreadsByThreadKey, [draftId]: original },
+  }));
+  expect(hasUnsentComparisonFollowUpDraft(legacy, true)).toBe(false);
 });

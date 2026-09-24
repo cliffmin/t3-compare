@@ -17,7 +17,7 @@ export function captureComparisonThread(
     | "title"
     | "titleState"
   > &
-    Partial<Pick<OrchestrationThread, "session">>,
+    Partial<Pick<OrchestrationThread, "session" | "pendingTurnStartMessageId">>,
 ): CompareRun {
   const original = originalComparisonTurn(thread);
   if (
@@ -31,6 +31,26 @@ export function captureComparisonThread(
     return run;
   const status = original.state;
   const entry = run.entries.find((entry) => entry.threadId === thread.id);
+  // A navigation can outlive the local start callback. The native settled
+  // original request is evidence of launch even when its callback never landed.
+  const reconciledLaunch =
+    entry &&
+    !entry.deleted &&
+    (entry.launch === "pending" || entry.launch === "uncertain") &&
+    entry.initialMessageId !== undefined &&
+    thread.messages.find((message) => message.role === "user")?.id === entry.initialMessageId &&
+    status !== "unverified" &&
+    thread.pendingTurnStartMessageId === null &&
+    thread.session?.status !== "running" &&
+    thread.session?.status !== "starting";
+  if (entry?.original && reconciledLaunch) {
+    return {
+      ...run,
+      entries: run.entries.map((candidate) =>
+        candidate === entry ? { ...candidate, launch: "started" } : candidate,
+      ),
+    };
+  }
   if (entry && !entry.original) {
     return {
       ...run,
@@ -39,6 +59,7 @@ export function captureComparisonThread(
         candidate === entry
           ? {
               ...candidate,
+              ...(reconciledLaunch ? { launch: "started" as const } : {}),
               original: {
                 messages: original.messages,
                 status,

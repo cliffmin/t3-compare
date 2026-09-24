@@ -74,6 +74,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -2140,6 +2141,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
   const [isComposerModelPickerOpen, setIsComposerModelPickerOpen] = useState(false);
   const [modelPickerHandle] = useState(() => PopoverCreateHandle());
+  const modelPickerTriggerId = useId();
+  const comparisonTriggerId = useId();
   const isMobileViewport = useMediaQuery("max-sm");
   const composerFormRef = useRef<HTMLFormElement>(null);
   const {
@@ -3651,7 +3654,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           });
           if (applied) {
             setComposerHighlightedItemId(null);
-            setIsComposerModelPickerOpen(true);
+            modelPickerHandle.open(modelPickerTriggerId);
           }
           return;
         }
@@ -3748,6 +3751,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       applyPromptReplacement,
       composerDraftTarget,
       handleInteractionModeChange,
+      modelPickerHandle,
+      modelPickerTriggerId,
       planModeUiEnabled,
       onUsageLimitsCommand,
       resolveActiveComposerTrigger,
@@ -5099,7 +5104,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         .openDraft(comparisonKey, environmentId, fallback, comparisonCatalog);
       props.onComparisonEnable?.();
       setMultipleModelSelections(checkedComparisonSelections(restored));
-      setIsComposerModelPickerOpen(true);
+      modelPickerHandle.open(comparisonTriggerId);
     }
   };
   const comparisonControl =
@@ -5114,6 +5119,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           onCheckedChange={toggleComparison}
         />
         <PopoverTrigger
+          id={comparisonTriggerId}
           handle={modelPickerHandle}
           type="button"
           disabled={multipleModelSelections === null || isSendBusy}
@@ -5122,7 +5128,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           aria-expanded={multipleModelSelections !== null && isComposerModelPickerOpen}
           onClick={(event) => {
             event.preventBaseUIHandler();
-            setIsComposerModelPickerOpen((open) => !open);
+            if (isComposerModelPickerOpen) modelPickerHandle.close();
+            else modelPickerHandle.open(comparisonTriggerId);
           }}
           className={cn(
             "cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
@@ -5193,6 +5200,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         />
       ) : null}
       <ProviderModelPicker
+        triggerId={modelPickerTriggerId}
         handle={modelPickerHandle}
         isComposerOwned
         disabled={providerCatalogPending || isSendBusy}
@@ -5987,8 +5995,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       setIsComposerScrollCollapsed(false);
       setIsComposerFocused(true);
     }
-    setIsComposerModelPickerOpen(true);
-  }, [composerControlsHidden, setIsComposerFocused, setIsComposerScrollCollapsed]);
+    modelPickerHandle.open(modelPickerTriggerId);
+  }, [
+    composerControlsHidden,
+    modelPickerHandle,
+    modelPickerTriggerId,
+    setIsComposerFocused,
+    setIsComposerScrollCollapsed,
+  ]);
 
   useImperativeHandle(
     composerRef,
