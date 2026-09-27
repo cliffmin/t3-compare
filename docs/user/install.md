@@ -33,8 +33,9 @@ composer, select at least two provider configurations, then send a shared prompt
 Stop the development command with Ctrl-C. Update a source checkout through Git and reinstall
 from the lockfile; inherited CLI update commands follow upstream distribution channels.
 For development checks and local desktop builds, use the
-[development guide](../operations/development.md). Locally verified macOS arm64 packages use
-ad-hoc signing; that is not notarized distribution or a guarantee about future Keychain prompts.
+[development guide](../operations/development.md). Local macOS arm64 packages default to ad-hoc signing, with optional
+[stable local signing](../specs/local-development-signing.md). Neither is notarized distribution
+or a guarantee about future Keychain prompts.
 Windows, Linux, mobile and remote comparison parity have not been release-verified.
 
 ## Inherited services

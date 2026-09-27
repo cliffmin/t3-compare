@@ -1,0 +1,38 @@
+{
+  "frontend-design": {
+    "source": "https://github.com/anthropics/skills",
+    "revision": "33375500bcea98d610eb30ce10ac4e59b89c390d",
+    "path": "skills/frontend-design",
+    "adaptation": "Native T3 design constraints."
+  },
+  "web-design-guidelines": {
+    "source": "https://github.com/vercel-labs/agent-skills",
+    "revision": "063bee94c3f4df8453406c830b0a7df0f2860278",
+    "path": "skills/web-design-guidelines",
+    "adaptation": "Product scope and runtime evidence constraints."
+  },
+  "systematic-debugging": {
+    "source": "https://github.com/obra/superpowers",
+    "revision": "5bf4e78011075bcfc0dc295f0724994cd123ee71",
+    "path": "skills/systematic-debugging",
+    "adaptation": "Condensed procedure; no sensitive diagnostics, external skill dependencies or polling."
+  },
+  "vercel-react-best-practices": {
+    "source": "https://github.com/vercel-labs/agent-skills",
+    "revision": "063bee94c3f4df8453406c830b0a7df0f2860278",
+    "path": "skills/react-best-practices",
+    "adaptation": "Selected React/Vite references; no Next.js rules or compiled duplicate."
+  },
+  "test-t3-app": {
+    "source": "https://github.com/pingdotgg/t3code",
+    "revision": "7445aa733ada33e45289e5aa5055f79142556513",
+    "path": ".agents/skills/test-t3-app",
+    "adaptation": "Synthetic fixtures and available host browser tools."
+  },
+  "test-t3-mobile": {
+    "source": "https://github.com/pingdotgg/t3code",
+    "revision": "7445aa733ada33e45289e5aa5055f79142556513",
+    "path": ".agents/skills/test-t3-mobile",
+    "adaptation": "Synthetic fixtures."
+  }
+}

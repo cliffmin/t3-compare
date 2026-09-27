@@ -1,0 +1,4 @@
+interface:
+  display_name: "T3 App Testing"
+  short_description: "Test web and desktop with isolated synthetic state"
+  default_prompt: "Use $test-t3-app to verify the affected flow against isolated state with the available browser tools."

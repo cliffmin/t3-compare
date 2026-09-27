@@ -29,7 +29,8 @@ Add `--browser` to open a browser automatically.
 Linked worktrees default to their own `.t3/userdata`, even when `T3CODE_HOME` is set.
 The main checkout defaults to `~/.t3/dev/userdata`. An explicit `--home-dir` wins in both cases.
 Never run a development server against the live `~/.t3/userdata`.
-See [test data](../../AGENTS.md#test-data) for copying a consistent database snapshot.
+Use synthetic projects/providers and isolated state for tests; do not copy personal live data.
+See [development and data](../../AGENTS.md#development-and-data).
 
 Read ports from the `[dev-runner]` output. Worktrees derive stable preferences from their paths,
 but occupied ports can shift them. `T3CODE_PORT_OFFSET` or `T3CODE_DEV_INSTANCE` can select a

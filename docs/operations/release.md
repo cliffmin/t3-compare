@@ -1,8 +1,36 @@
-# Release Checklist
+# Release operations
 
-> For maintainers. Using T3 Code? See [docs/user](../user/).
+## T3 Compare source releases
 
-This document covers the unified release workflow for stable and nightly desktop releases.
+T3 Compare currently distributes source, not public binaries, a hosted app or an npm
+package. Follow the [source quickstart](../user/install.md) and
+[Fork CI](../../.github/workflows/fork-ci.yml). Upstream installers and `npx t3`
+do not install this fork.
+
+Before publishing a source revision:
+
+- Review the exact tree and reachable history for private data, credentials and generated
+  artifacts; retain upstream licensing and attribution.
+- Verify the documented frozen-lockfile installation, focused checks and an isolated
+  synthetic comparison, individual/shared follow-ups, draft reload and ordinary chat.
+  Synthetic providers demonstrate workflow behavior, not model quality.
+- Run Fork CI on that exact revision after an authorized push. A local check does not
+  establish hosted CI success. Review skipped jobs as well as failures.
+- Obtain approval for publication separately from candidate preparation. At the approved
+  visibility transition, enable and verify GitHub private vulnerability reporting, update
+  the [security policy](../../.github/SECURITY.md), and verify public source and issue access.
+  Private reporting is not assumed available while the repository is private.
+
+Local desktop packaging is described in [comparison desktop builds](comparison-desktop.md).
+It does not authorize distribution, installed-state changes or signing/trust changes.
+
+## Inherited upstream release workflow
+
+The remainder of this guide documents T3 Code's stable, nightly and preview release
+operations. The inherited release workflow is restricted to `pingdotgg/t3code`; it is
+not the fork's source-release procedure. Its credentials, npm namespaces, domains and
+update feeds belong to upstream. Do not enable or repurpose those operations as part
+of a source release.
 
 ## What the workflow does
 

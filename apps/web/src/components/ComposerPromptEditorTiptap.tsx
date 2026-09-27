@@ -794,6 +794,9 @@ function ComposerPromptEditorTiptapInner(props: ComposerPromptEditorProps) {
           ),
           "data-testid": "composer-editor",
           "data-composer-rich-text": richText ? "true" : "false",
+          role: "textbox",
+          "aria-label": placeholder || "Message",
+          "aria-multiline": "true",
           "aria-placeholder": placeholder,
         },
         handleKeyDown: (view, event) => {

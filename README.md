@@ -19,7 +19,7 @@ providers may have different tools, permissions, subscriptions and workspace acc
 
 ## Run from source
 
-This candidate is a **source release**. Public Compare binaries and a hosted demo are not
+Run Compare from source. Public Compare binaries and a hosted demo are not
 provided. Upstream installers, `npx t3`, Homebrew's `t3-code` and the upstream mobile apps do
 not install these comparison changes.
 
@@ -69,22 +69,6 @@ not prove model reasoning. An owner-written synthesis request uses the shared co
 there is no dedicated synthesis mode, differences view, verified winner or claim-level citation
 interface. See the [comparison guide](docs/user/composer.md#compare-provider-answers).
 
-## Engineering decisions
-
-Cliff defined the product behavior and acceptance criteria, directed AI-assisted implementation,
-and supplied working-app feedback. AI agents implemented and independently reviewed changes;
-that review is not a claim of independent human code review.
-
-Two corrections shaped verification. An accepted source retry could still appear terminal until
-its new turn was adopted, enabling a shared send too early. The
-[pending-state correction](https://github.com/cliffmin/t3-compare/commit/5783330c4)
-keeps it pending through adoption, with receipt/restart regression coverage. A pane could also
-have plausible geometry yet fail to consume real scrolling. The
-[scroll correction](https://github.com/cliffmin/t3-compare/commit/955b2188b)
-bounded its height and added a manually invoked real-wheel check. Geometry assertions alone
-were insufficient; the wheel check is not automatic CI. These are reliability observations,
-not measured speedups or model-quality results.
-
 ## Scope and status
 
 The comparison UI targets web and Electron desktop. Local macOS arm64 builds and synthetic
@@ -93,14 +77,9 @@ remote connection mode. Native mobile comparison parity is not claimed. Comparis
 preferences are client-local and can be lost when site data is cleared. Shared conversations
 use completed answers; availability and context limits remain visible.
 
-Compare.22 includes saved shared-draft reload repair, native aggregate comparison actions,
-consolidated worktree-deletion consent and refined Compare controls. It also restores the
-visible provider picker when Compare is enabled and reconciles a completed source turn whose
-local launch state remained pending.
-Its macOS arm64 package was locally verified, installed and launched; owner working-app
-acceptance and public-release approval remain pending. No passing hosted CI run is
-claimed by this document. [Roadmap and limits](docs/roadmap.md) ·
-[Fork CI definition](.github/workflows/fork-ci.yml).
+[Engineering case study](docs/internals/comparison-case-study.md) ·
+[Product requirements](docs/specs/comparison.md) · [Roadmap](docs/roadmap.md) ·
+[Fork CI](.github/workflows/fork-ci.yml).
 
 The source retains upstream services, including provider/model metadata, CLI update/triage
 routes and product analytics. The quickstart disables analytics for its server process;
@@ -113,7 +92,7 @@ Use this fork's [issues](https://github.com/cliffmin/t3-compare/issues) for fork
 feature requests once the repository is public. Include the source revision and a sanitized
 reproduction, never credentials, pairing URLs or private conversations. For vulnerabilities,
 read the [security reporting policy](.github/SECURITY.md); private reporting must be enabled
-and verified before publication. [Contributing](CONTRIBUTING.md) explains focused checks and
+and verified at the approved public visibility transition. [Contributing](CONTRIBUTING.md) explains focused checks and
 AI attribution. [Documentation](docs/README.md) links the inherited architecture and user guides.
 
 T3 Code remains the upstream project. Its code and attribution are retained under the

@@ -9,8 +9,9 @@ This source candidate has not yet completed public-release approval. A private
 vulnerability-reporting channel for this fork has not been enabled and verified.
 Do not put vulnerability details, credentials or private conversations in public issues.
 
-Before publication, the maintainer must enable and verify a private reporting channel
-and replace this notice with its instructions. This document does not claim that a
+At the approved public visibility transition, the maintainer must enable and verify
+GitHub private vulnerability reporting and replace this notice with its instructions.
+That feature is not assumed available while this repository is private. This document does not claim that a
 Report a vulnerability button is currently available, offer safe harbor, or promise a
 response time. Publication remains gated on that setup.
 

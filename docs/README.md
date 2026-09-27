@@ -30,7 +30,7 @@ describe the inherited T3 Code foundation; upstream installation links install u
 ## Working on this fork
 
 Start with the [development runbook](./operations/development.md) and
-[contribution policy](../CONTRIBUTING.md). The [roadmap](./roadmap.md) distinguishes implemented behavior from pending acceptance.
+[contribution policy](../CONTRIBUTING.md). See [comparison requirements](./specs/comparison.md) for current behavior.
 
 Internal notes preserve architectural decisions, constraints, and implementation traps that the
 source alone does not explain. Most code changes do not need an internal documentation update. Follow the
