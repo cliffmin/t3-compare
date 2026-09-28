@@ -1,7 +1,7 @@
 # Run T3 Compare
 
-T3 Compare is an independent T3 Code fork. This candidate is distributed as source;
-public fork binaries and a hosted demonstration are not provided. Upstream installers,
+T3 Compare is an independent T3 Code fork released as an early public source preview.
+Public fork binaries and a hosted demonstration are not provided. Upstream installers,
 `npx t3`, Homebrew's `t3-code`, and upstream mobile apps install T3 Code, not this fork.
 
 ## Requirements
@@ -20,8 +20,7 @@ vp install --frozen-lockfile
 T3CODE_TELEMETRY_ENABLED=false vp run dev --home-dir "$PWD/.t3"
 ```
 
-The clone URL is the intended publication destination; access remains restricted until the
-owner publishes the candidate. Open the local pairing URL printed by the runner. Its token
+Open the local pairing URL printed by the runner. Its token
 is a credential: do not include it in screenshots or reports. The explicit home directory
 keeps this checkout's data under the ignored `.t3` directory rather than the installed app's
 state. Keep `VITE_HTTP_URL` and `VITE_WS_URL` unset.

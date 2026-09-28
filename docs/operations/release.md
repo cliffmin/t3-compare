@@ -2,8 +2,8 @@
 
 ## T3 Compare source releases
 
-T3 Compare currently distributes source, not public binaries, a hosted app or an npm
-package. Follow the [source quickstart](../user/install.md) and
+T3 Compare is an early public source preview. It does not distribute public binaries,
+a hosted app or an npm package. Follow the [source quickstart](../user/install.md) and
 [Fork CI](../../.github/workflows/fork-ci.yml). Upstream installers and `npx t3`
 do not install this fork.
 
@@ -16,10 +16,9 @@ Before publishing a source revision:
   Synthetic providers demonstrate workflow behavior, not model quality.
 - Run Fork CI on that exact revision after an authorized push. A local check does not
   establish hosted CI success. Review skipped jobs as well as failures.
-- Obtain approval for publication separately from candidate preparation. At the approved
-  visibility transition, enable and verify GitHub private vulnerability reporting, update
-  the [security policy](../../.github/SECURITY.md), and verify public source and issue access.
-  Private reporting is not assumed available while the repository is private.
+- Verify public source and issue access, and check that GitHub private vulnerability
+  reporting remains enabled and reachable through the [security policy](../../.github/SECURITY.md).
+  Publication remains an explicit maintainer action, separate from local validation.
 
 Local desktop packaging is described in [comparison desktop builds](comparison-desktop.md).
 It does not authorize distribution, installed-state changes or signing/trust changes.

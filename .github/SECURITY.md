@@ -5,15 +5,14 @@ reported to upstream merely because this repository inherits upstream code.
 
 ## T3 Compare
 
-This source candidate has not yet completed public-release approval. A private
-vulnerability-reporting channel for this fork has not been enabled and verified.
-Do not put vulnerability details, credentials or private conversations in public issues.
+Report suspected vulnerabilities privately through GitHub's
+[Report a vulnerability](https://github.com/cliffmin/t3-compare/security/advisories/new)
+form, also available from this repository's Security tab. Sign in to GitHub to submit
+an advisory. Include the affected source revision, impact and a minimal reproduction.
 
-At the approved public visibility transition, the maintainer must enable and verify
-GitHub private vulnerability reporting and replace this notice with its instructions.
-That feature is not assumed available while this repository is private. This document does not claim that a
-Report a vulnerability button is currently available, offer safe harbor, or promise a
-response time. Publication remains gated on that setup.
+Do not put vulnerability details, credentials, pairing URLs or private conversations
+in public issues. Remove secrets and unrelated personal data from reports and attachments.
+This early public source preview does not promise a response time or offer safe harbor.
 
 ## Upstream T3 Code
 

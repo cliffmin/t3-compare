@@ -19,8 +19,8 @@ providers may have different tools, permissions, subscriptions and workspace acc
 
 ## Run from source
 
-Run Compare from source. Public Compare binaries and a hosted demo are not
-provided. Upstream installers, `npx t3`, Homebrew's `t3-code` and the upstream mobile apps do
+T3 Compare is an early public source preview. Public Compare binaries and a hosted demo
+are not provided. Upstream installers, `npx t3`, Homebrew's `t3-code` and the upstream mobile apps do
 not install these comparison changes.
 
 Use Git, Node.js **24.13.1 or later in the 24.x series**, and [Vite+](https://viteplus.dev/guide/).
@@ -89,10 +89,10 @@ before using upstream remote/update/support integrations.
 ## Contribute and report
 
 Use this fork's [issues](https://github.com/cliffmin/t3-compare/issues) for fork behavior and
-feature requests once the repository is public. Include the source revision and a sanitized
+feature requests. Include the source revision and a sanitized
 reproduction, never credentials, pairing URLs or private conversations. For vulnerabilities,
-read the [security reporting policy](.github/SECURITY.md); private reporting must be enabled
-and verified at the approved public visibility transition. [Contributing](CONTRIBUTING.md) explains focused checks and
+use [GitHub private vulnerability reporting](https://github.com/cliffmin/t3-compare/security/advisories/new)
+and read the [security reporting policy](.github/SECURITY.md). [Contributing](CONTRIBUTING.md) explains focused checks and
 AI attribution. [Documentation](docs/README.md) links the inherited architecture and user guides.
 
 T3 Code remains the upstream project. Its code and attribution are retained under the
