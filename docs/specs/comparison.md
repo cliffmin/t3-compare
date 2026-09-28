@@ -21,6 +21,9 @@ mobile and remote consumers without implying comparison parity there.
 ## Entry and configuration
 
 - Preserve native New chat project selection and shortcuts. New drafts start with Compare off.
+- New-chat guidance explains ordinary chat and independent comparison follow-ups. With Compare on,
+  show a compact, wrapping selected-provider summary and the existing eligibility/send guard;
+  keep this guidance out of existing threads and inline composers.
 - Enabling Compare restores valid remembered provider choices and visibly opens the existing
   provider popup. The enabled, bold Compare label independently toggles the popup with pointer
   or keyboard; it never toggles the mode or changes configuration. Preserve focus restoration.

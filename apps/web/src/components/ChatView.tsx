@@ -10191,6 +10191,11 @@ export default function ChatView(props: ChatViewProps) {
                           activeProjectRef={activeProjectRef}
                           activeProjectTitle={activeProject?.title ?? null}
                         />
+                        <p className="mt-3 text-center text-sm text-muted-foreground">
+                          {multipleModelSelections === null
+                            ? "Ask one provider, or turn on Compare to explore different approaches."
+                            : "Keep each conversation independent. Follow up across the completed answers."}
+                        </p>
                       </div>
                     </div>
                   ) : null}
@@ -10206,6 +10211,7 @@ export default function ChatView(props: ChatViewProps) {
                       <ComposerSurface.Host>
                         <div ref={attachDraftHeroComposerAnchorRef} className="relative z-10">
                           <ChatComposer
+                            showDraftComparisonSummary={isDraftHeroState}
                             multipleModelSelections={embedded ? null : multipleModelSelections}
                             ownsInput={ownsInput}
                             embeddedComparison={isEmbeddedComparison}
