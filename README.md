@@ -1,8 +1,17 @@
 # T3 Compare
 
-Send one prompt to multiple AI providers, explore each conversation independently, and ask a
-chosen model to work across their answers. T3 Compare is an independent
-[T3 Code](https://github.com/pingdotgg/t3code) fork focused on comparison workflows.
+T3 Compare is for developers who already use more than one coding agent and are tired of
+re-prompting them in separate windows. Send one task to selected providers, watch each
+**native** session (tools, approvals, worktrees) in parallel, continue any thread alone,
+then ask one provider to work from the completed answers.
+
+It is an independent [T3 Code](https://github.com/pingdotgg/t3code) fork. This repository
+is framed as an **agentic-engineering study / portfolio project**: practice harness design
+(contracts, provenance, readiness, review) on real comparison workflows. It is an early
+**public source preview**, not a claim of product adoption, model ranking, or measured
+productivity gains.
+
+**Study index:** [docs/study/](docs/study/) · **How to review:** [docs/study/how-to-review.md](docs/study/how-to-review.md) · **Case study:** [docs/internals/comparison-case-study.md](docs/internals/comparison-case-study.md)
 
 ## What the fork adds
 
@@ -17,11 +26,19 @@ T3 supplies the provider adapters, event-sourced server, typed WebSocket protoco
 web/desktop/mobile foundation. This fork does not establish which model is correct. Different
 providers may have different tools, permissions, subscriptions and workspace access.
 
+Cliff’s role is product direction for comparison (behavior, acceptance criteria, UI decisions)
+and directing AI-assisted implementation and review. See
+[contribution boundary and AI assist](docs/study/contribution-and-ai.md).
+
+## Demo status
+
+- **Synthetic walkthrough (below):** available; verifies application behavior only.
+- **Live-provider coding demo:** [not recorded yet](docs/study/demo.md).
+
 ## Run from source
 
-T3 Compare is an early public source preview. Public Compare binaries and a hosted demo
-are not provided. Upstream installers, `npx t3`, Homebrew's `t3-code` and the upstream mobile apps do
-not install these comparison changes.
+Public Compare binaries and a hosted demo are not provided. Upstream installers, `npx t3`,
+Homebrew's `t3-code` and the upstream mobile apps do not install these comparison changes.
 
 Use Git, Node.js **24.13.1 or later in the 24.x series**, and [Vite+](https://viteplus.dev/guide/).
 From a checkout of this repository:
@@ -77,9 +94,14 @@ remote connection mode. Native mobile comparison parity is not claimed. Comparis
 preferences are client-local and can be lost when site data is cleared. Shared conversations
 use completed answers; availability and context limits remain visible.
 
+Active study experiments:
+[#5 readiness](https://github.com/cliffmin/t3-compare/issues/5) ·
+[#6 asymmetry disclosure](https://github.com/cliffmin/t3-compare/issues/6) ·
+[#7 feature-gated Jev](https://github.com/cliffmin/t3-compare/issues/7).
+
 [Engineering case study](docs/internals/comparison-case-study.md) ·
 [Product requirements](docs/specs/comparison.md) · [Roadmap](docs/roadmap.md) ·
-[Fork CI](.github/workflows/fork-ci.yml).
+[Fork CI](.github/workflows/fork-ci.yml) · [Study notes](docs/study/).
 
 The source retains upstream services, including provider/model metadata, CLI update/triage
 routes and product analytics. The quickstart disables analytics for its server process;
@@ -89,7 +111,7 @@ before using upstream remote/update/support integrations.
 ## Contribute and report
 
 Use this fork's [issues](https://github.com/cliffmin/t3-compare/issues) for fork behavior and
-feature requests. Include the source revision and a sanitized
+study experiments. Include the source revision and a sanitized
 reproduction, never credentials, pairing URLs or private conversations. For vulnerabilities,
 use [GitHub private vulnerability reporting](https://github.com/cliffmin/t3-compare/security/advisories/new)
 and read the [security reporting policy](.github/SECURITY.md). [Contributing](CONTRIBUTING.md) explains focused checks and

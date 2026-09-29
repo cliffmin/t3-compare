@@ -1,5 +1,13 @@
 # T3 Compare documentation
 
+## Portfolio / study framing
+
+- [Study index](./study/README.md) — goals, AI contribution boundary, concepts, how to review
+- [Engineering case study](./internals/comparison-case-study.md)
+- [Demo status](./study/demo.md)
+
+---
+
 Start with the [product status and roadmap](./roadmap.md) and
 [current comparison workflow](./user/composer.md#compare-provider-answers). Most guides below
 describe the inherited T3 Code foundation; upstream installation links install upstream T3.
