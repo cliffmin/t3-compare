@@ -1328,6 +1328,7 @@ export interface ChatComposerProps {
   draftId: DraftId | null;
   multipleModelSelections: ReadonlyArray<ModelSelection> | null;
   supportsMultipleModels: boolean;
+  showDraftComparisonSummary?: boolean;
   embeddedComparison?: boolean;
   onComparisonEnable?: () => void;
   onMultipleModelSelectionsChange: React.Dispatch<
@@ -1958,8 +1959,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     exactSelectionAvailability && exactSelectionAvailability.status !== "valid"
       ? exactSelectionAvailability.reason
       : null;
+  const comparisonBlockReason = comparisonSendBlockReason(
+    multipleModelSelections,
+    comparisonCatalog,
+  );
   const sendDisabledReason =
-    comparisonSendBlockReason(multipleModelSelections, comparisonCatalog) ??
+    comparisonBlockReason ??
     externalSendDisabledReason ??
     exactSelectionBlock ??
     (multipleModelSelections !== null && multipleModelSelections.length < 2
@@ -7247,6 +7252,27 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               </div>
             )}
           </div>
+          {props.showDraftComparisonSummary && multipleModelSelections !== null ? (
+            <div
+              className="border-t border-border/50 px-4 py-2 text-xs leading-5 wrap-anywhere text-muted-foreground"
+              role="status"
+            >
+              <p>
+                {multipleModelSelections.length} selected
+                {multipleModelSelections.length > 0
+                  ? ` · ${multipleModelSelections
+                      .map(
+                        (selection) =>
+                          comparisonCatalog.entries.find(
+                            (entry) => entry.instanceId === selection.instanceId,
+                          )?.displayName ?? selection.instanceId,
+                      )
+                      .join(" + ")}`
+                  : null}
+              </p>
+              {comparisonBlockReason ? <p>{comparisonBlockReason}</p> : null}
+            </div>
+          ) : null}
         </ComposerSurface.Main>
       </div>
     </form>

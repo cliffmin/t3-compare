@@ -321,6 +321,12 @@ export function ComparisonFollowUp({
           {disabledReason}
         </p>
       ) : null}
+      {preview?.earlierCompleted?.length ? (
+        <p role="status" className="px-4 pb-2 text-xs text-muted-foreground">
+          Earlier completed answers included from {preview.earlierCompleted.join(", ")}. Their
+          latest requests failed to start.
+        </p>
+      ) : null}
       {preview?.missing ? (
         <p className="px-4 pb-2 text-xs text-muted-foreground">
           {preview.missing} source answer{preview.missing === 1 ? " is" : "s are"} missing.

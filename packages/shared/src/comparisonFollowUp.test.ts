@@ -59,6 +59,22 @@ const source = (patch: Partial<ComparisonSourceThread> = {}): ComparisonSourceTh
   ],
   ...patch,
 });
+const failedStart = (patch: Partial<ComparisonSourceThread> = {}): ComparisonSourceThread =>
+  source({
+    id: ThreadId.make("failed"),
+    pendingTurnStartMessageId: null,
+    messages: [...source().messages, { ...message("new-request", "user"), createdAt: later }],
+    session: {
+      threadId: ThreadId.make("failed"),
+      status: "error",
+      providerName: null,
+      runtimeMode: "approval-required",
+      activeTurnId: null,
+      lastError: "failed to start",
+      updatedAt: later,
+    },
+    ...patch,
+  });
 const context = (threads: ReadonlyArray<ComparisonSourceThread>): ComparisonFollowUpContext => ({
   originalPrompt: "Compare choices",
   expectedTargetMessageId: null,
@@ -134,24 +150,75 @@ describe("native comparison context", () => {
     expect(result.completed).toBe(1);
     expect(result.missing).toBe(2);
   });
-  it("does not infer completion from an old answer after a failed new request", () => {
-    const failed = source({
-      id: ThreadId.make("failed"),
-      pendingTurnStartMessageId: null,
-      messages: [...source().messages, { ...message("new-request", "user"), createdAt: later }],
-      session: {
-        threadId: ThreadId.make("failed"),
-        status: "error",
-        providerName: null,
-        runtimeMode: "approval-required",
-        activeTurnId: null,
-        lastError: "failed",
-        updatedAt: later,
-      },
-    });
+  it("retains and labels a proven earlier answer after a definitive failed start", () => {
+    const failed = failedStart();
     const result = body([source(), failed]);
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(2);
+    expect(result.missing).toBe(0);
+    expect(result.earlierCompleted).toEqual(["failed"]);
+    const snapshot = JSON.parse(result.text!.split("\n\n")[1]!);
+    expect(snapshot.sources[1]).toMatchObject({
+      threadId: "failed",
+      turnId: "turn",
+      status: "completed",
+      answerStatus: "earlier-completed",
+      latestRequestStatus: "failed",
+      parts: [
+        { messageId: "part1", text: "part1" },
+        { messageId: "part2", text: "part2" },
+      ],
+    });
+  });
+  it("does not attribute an earlier answer to the failed request's changed model/options", () => {
+    const changed = {
+      instanceId: ProviderInstanceId.make("different-provider"),
+      model: "model-b",
+      options: [{ id: "effort", value: "low" }],
+    };
+    const result = body([failedStart({ modelSelection: changed })]);
+    const snapshot = JSON.parse(result.text!.split("\n\n")[1]!);
+    expect(snapshot.sources[0]).toMatchObject({
+      turnId: "turn",
+      modelSelection: null,
+      currentThreadModelSelection: changed,
+      modelSelectionReason: expect.stringContaining("may have changed"),
+      answerStatus: "earlier-completed",
+      latestRequestStatus: "failed",
+    });
+    const fresh = JSON.parse(body().text!.split("\n\n")[1]!).sources[0];
+    expect(fresh.modelSelection).toEqual(source().modelSelection);
+    expect(fresh).not.toHaveProperty("currentThreadModelSelection");
+    expect(fresh).not.toHaveProperty("modelSelectionReason");
+  });
+  it("allows all sources to contribute proven earlier answers", () => {
+    const result = body([failedStart(), failedStart({ id: ThreadId.make("second") })]);
+    expect(result.completed).toBe(2);
+    expect(result.earlierCompleted).toEqual(["failed", "second"]);
+  });
+  it.each([
+    { pendingTurnStartMessageId: undefined },
+    { session: null },
+    { session: { ...failedStart().session!, status: "ready" as const } },
+    { session: { ...failedStart().session!, lastError: null } },
+    { session: { ...failedStart().session!, updatedAt: now } },
+    { session: { ...failedStart().session!, activeTurnId: TurnId.make("unknown") } },
+    { latestTurn: { ...source().latestTurn!, state: "error" as const } },
+    { latestTurn: { ...source().latestTurn!, state: "interrupted" as const } },
+  ])("does not recover earlier text without definitive evidence: %j", (patch) => {
+    const result = body([source(), failedStart(patch)]);
+    expect(result.text ?? "").not.toContain('"answerStatus":"earlier-completed"');
+  });
+  it("blocks pending retries despite definitive previous failure", () => {
+    expect(
+      body([failedStart({ pendingTurnStartMessageId: MessageId.make("retry") })]).error,
+    ).toContain("Waiting");
+  });
+  it("keeps failed-start answers distinct from missing sources", () => {
+    const result = body([failedStart(), source({ id: ThreadId.make("deleted"), deletedAt: now })]);
+    expect(result.completed).toBe(1);
     expect(result.missing).toBe(1);
-    expect(JSON.parse(result.text!.split("\n\n")[1]!).sources[1].parts).toEqual([]);
+    expect(result.earlierCompleted).toEqual(["failed"]);
   });
   it("blocks a queued source before provider adoption", () => {
     const thread = source({

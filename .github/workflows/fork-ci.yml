@@ -69,8 +69,8 @@ jobs:
           run-install: |
             args:
               - --frozen-lockfile
-      - name: Test web, contracts, and client runtime
-        run: vp run --filter @t3tools/web --filter @t3tools/contracts --filter @t3tools/client-runtime test
+      - name: Test web, contracts, client runtime, and shared helpers
+        run: vp run --filter @t3tools/web --filter @t3tools/contracts --filter @t3tools/client-runtime --filter @t3tools/shared test
 
   server_tests:
     name: Server tests ${{ matrix.shard }}
