@@ -13,6 +13,7 @@ import {
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { decideOrchestrationCommand } from "./decider.ts";
 
 const now = "2026-01-01T00:00:00.000Z";
@@ -89,6 +90,43 @@ function readModel(): OrchestrationReadModel {
     ],
   };
 }
+function failedStartModel(): OrchestrationReadModel {
+  const model = readModel();
+  return {
+    ...model,
+    threads: model.threads.map((value) =>
+      value.id !== sourceId
+        ? value
+        : {
+            ...value,
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("other-provider"),
+              model: "changed-model",
+              options: [{ id: "effort", value: "low" }],
+            },
+            pendingTurnStartMessageId: null,
+            messages: [
+              ...value.messages,
+              {
+                ...value.messages[0]!,
+                id: MessageId.make("failed-follow-up"),
+                text: "Later request",
+                createdAt: "2026-01-01T00:01:00.000Z",
+              },
+            ],
+            session: {
+              threadId: sourceId,
+              status: "error",
+              providerName: "codex",
+              runtimeMode: "approval-required",
+              activeTurnId: null,
+              lastError: "Failed to start",
+              updatedAt: "2026-01-01T00:01:01.000Z",
+            },
+          },
+    ),
+  };
+}
 const command = (): Extract<OrchestrationCommand, { type: "thread.turn.start" }> => ({
   type: "thread.turn.start",
   commandId: CommandId.make("follow-up"),
@@ -123,6 +161,57 @@ it.layer(NodeServices.layer)("comparison turn-start boundary", (it) => {
         role: "user",
       });
       expect(events.some((event) => event.type === "thread.turn-start-requested")).toBe(true);
+    }),
+  );
+  it.effect("persists an earlier proven answer with explicit failed-start provenance", () =>
+    Effect.gen(function* () {
+      const output = yield* decideOrchestrationCommand({
+        command: command(),
+        readModel: failedStartModel(),
+      });
+      const events = Array.isArray(output) ? output : [output];
+      const message = events.find((event) => event.type === "thread.message-sent");
+      expect(message?.payload.text).toContain('"answerStatus":"earlier-completed"');
+      expect(message?.payload.text).toContain('"latestRequestStatus":"failed"');
+      expect(message?.payload.text).toContain('"turnId":"source-turn"');
+      expect(message?.payload.text).toContain("authoritative answer");
+      const snapshot = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(
+        message!.payload.text.split("\n\n")[1]!,
+      );
+      expect(snapshot).toMatchObject({
+        sources: [
+          {
+            modelSelection: null,
+            currentThreadModelSelection: {
+              instanceId: "other-provider",
+              model: "changed-model",
+              options: [{ id: "effort", value: "low" }],
+            },
+            modelSelectionReason: expect.stringContaining("may have changed"),
+          },
+        ],
+      });
+      expect(events.some((event) => event.type === "thread.turn-start-requested")).toBe(true);
+    }),
+  );
+  it.effect("rejects a retry or stale failed-start snapshot before persisting anything", () =>
+    Effect.gen(function* () {
+      for (const patch of [
+        { pendingTurnStartMessageId: MessageId.make("retry") },
+        { updatedAt: "2026-01-01T00:02:00.000Z" },
+      ]) {
+        const model = failedStartModel();
+        const changed = {
+          ...model,
+          threads: model.threads.map((value) =>
+            value.id === sourceId ? { ...value, ...patch } : value,
+          ),
+        };
+        const error = yield* Effect.flip(
+          decideOrchestrationCommand({ command: command(), readModel: changed }),
+        );
+        expect(error.message).toMatch(/Waiting|changed before sending/);
+      }
     }),
   );
   it.effect("leaves ordinary native input unchanged", () =>

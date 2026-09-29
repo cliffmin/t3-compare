@@ -88,6 +88,7 @@ export function comparisonFollowUpBody(input: {
   const seen = new Set<string>();
   const sources = [];
   let completed = 0;
+  const earlierCompleted: string[] = [];
   for (const source of input.context.sources) {
     if (source.threadId !== null) {
       if (source.threadId === input.target.id || seen.has(source.threadId)) {
@@ -139,9 +140,20 @@ export function comparisonFollowUpBody(input: {
       live?.messages.findLastIndex(
         (message) => message.turnId === turn?.turnId && message.role === "assistant",
       ) ?? -1;
-    // A failed start can leave the preceding completed turn as latestTurn.
-    // Its answer is not evidence that the new request completed.
-    const currentAnswers = lastUser > lastAnswer ? [] : answers;
+    // Keep the proven turn only when native state confirms the later start failed.
+    // A stale error or a pending retry is not evidence about that later request.
+    const latestRequest = live?.messages[lastUser];
+    const earlierAnswer = Boolean(
+      lastUser > lastAnswer &&
+      answers.length > 0 &&
+      live?.pendingTurnStartMessageId === null &&
+      live.session?.status === "error" &&
+      live.session.activeTurnId === null &&
+      live.session.lastError?.trim() &&
+      latestRequest &&
+      Date.parse(live.session.updatedAt) >= Date.parse(latestRequest.createdAt),
+    );
+    const currentAnswers = lastUser > lastAnswer && !earlierAnswer ? [] : answers;
     const parts = currentAnswers
       .filter((message) => message.text.trim())
       .map((message) => ({
@@ -149,12 +161,22 @@ export function comparisonFollowUpBody(input: {
         text: message.text,
       }));
     if (parts.length) completed += 1;
+    if (parts.length && earlierAnswer) earlierCompleted.push(source.label);
     sources.push({
       label: source.label,
       threadId: source.threadId,
       turnId: turn?.turnId ?? null,
-      modelSelection: live?.modelSelection ?? null,
+      modelSelection: earlierAnswer ? null : (live?.modelSelection ?? null),
       status: parts.length ? "completed" : "missing",
+      ...(parts.length && earlierAnswer
+        ? {
+            answerStatus: "earlier-completed",
+            latestRequestStatus: "failed",
+            currentThreadModelSelection: live?.modelSelection ?? null,
+            modelSelectionReason:
+              "The earlier completed turn's model and options are unavailable; the current thread selection may have changed before the failed request.",
+          }
+        : {}),
       missingReason: parts.length
         ? null
         : !live || source.unavailable
@@ -180,5 +202,5 @@ export function comparisonFollowUpBody(input: {
       error: `The complete comparison context exceeds the native ${PROVIDER_SEND_TURN_MAX_INPUT_CHARS.toLocaleString()} character input limit. Shorten the source answers or continue an individual thread.`,
     };
   }
-  return { text, completed, missing: sources.length - completed };
+  return { text, completed, missing: sources.length - completed, earlierCompleted };
 }
