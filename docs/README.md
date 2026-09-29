@@ -4,6 +4,12 @@ Start with the [product status and roadmap](./roadmap.md) and
 [current comparison workflow](./user/composer.md#compare-provider-answers). Most guides below
 describe the inherited T3 Code foundation; upstream installation links install upstream T3.
 
+## Engineering case study
+
+[Comparison architecture and tradeoffs](./internals/comparison-case-study.md) connects the
+workflow to its source, tests and verification limits. The [README walkthrough](../README.md#a-short-walkthrough)
+shows actual app captures with synthetic providers.
+
 ## Using the app
 
 - [Run T3 Compare from source](./user/install.md)

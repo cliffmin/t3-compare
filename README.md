@@ -1,8 +1,15 @@
 # T3 Compare
 
-Send one prompt to multiple AI providers, explore each conversation independently, and ask a
-chosen model to work across their answers. T3 Compare is an independent
-[T3 Code](https://github.com/pingdotgg/t3code) fork focused on comparison workflows.
+Send one prompt to coding agents side by side, continue each conversation independently,
+and ask a chosen provider to work across their completed answers. Each source keeps its
+native session, including tools, approvals and workspace controls.
+
+An independent [T3 Code](https://github.com/pingdotgg/t3code) fork and early public source
+preview. Start with the [walkthrough](#a-short-walkthrough) or the
+[engineering case study](docs/internals/comparison-case-study.md).
+
+Built on T3 Code's application and provider infrastructure. The engineering case study
+explains the comparison workflow, implementation decisions and verification.
 
 ## What the fork adds
 

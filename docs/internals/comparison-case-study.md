@@ -1,65 +1,113 @@
-# T3 Compare: extending an AI coding workspace for comparison
+# T3 Compare: coordinating native coding-agent sessions
 
-T3 Compare lets a user send one prompt to selected AI providers, read their responses side
-by side, continue each conversation independently, and ask a chosen model to work across
-the completed answers. It is an independent fork of T3 Code.
+Compare sends one prompt to selected coding agents, keeps their native conversations side
+by side, and lets a chosen provider work across completed answers. The engineering problem
+is coordinating independent sessions without losing their identity, state or configuration.
 
-## Problem and scope
+## My contribution
 
-Comparing answers across separate tools requires repeating prompts and manually carrying
-context between conversations. The product brings those steps into one workspace while
-keeping each provider's native conversation available.
+I defined comparison behavior, UI decisions and acceptance criteria, and directed
+AI-assisted implementation, debugging and review. [T3 Code](https://github.com/pingdotgg/t3code)
+supplies the provider adapters, event-sourced server, typed protocol and application foundation.
+The fork adds comparison coordination, presentation, saved grouping and follow-up workflows.
+Upstream code and attribution remain under the [MIT license](../../LICENSE).
 
-The initial scope is a general comparison workflow for web and Electron. A dedicated
-synthesis interface, verified ranking of models, and a differences view are outside the
-current release. Providers can have different tools, permissions, subscriptions and context;
-the interface does not make their answers a controlled benchmark.
+This is AI-assisted development. Automated checks and independent agent review are evidence
+about particular changes; they do not establish human line-by-line review or model accuracy.
 
-## Contribution and attribution
+## Scatter-gather with native sessions
 
-Cliff defined product behavior, directed UI iterations and acceptance criteria, and used
-AI agents for implementation, debugging and review. T3 Code supplies the provider adapters,
-event-sourced server, typed WebSocket protocol and application foundations. The fork adds
-comparison coordination, presentation, saved comparison state and follow-up workflows.
+```mermaid
+flowchart LR
+    P[Shared prompt and exact configurations] --> A[Native agent session A]
+    P --> B[Native agent session B]
+    A --> RA[Completed answer and source identity]
+    B --> RB[Completed answer and source identity]
+    RA --> G[Readiness and context validation]
+    RB --> G
+    G --> F[User-directed shared follow-up]
+    F --> N[One linked native conversation]
+```
 
-This is AI-assisted development. Agent review and automated checks provide evidence about
-specific behavior; they do not establish human line-by-line review or prove model accuracy.
+The scatter step starts independent native conversations with their submitted configuration
+and workspace choices. Each conversation can continue on its own. The gather step waits for
+source state to permit sending and snapshots eligible completed answers for a user-directed
+follow-up. It is not an automatic winner selection or an autonomous agent debate.
 
-## Engineering choices
+| Concern                                             | Implementation to inspect                                                  |
+| --------------------------------------------------- | -------------------------------------------------------------------------- |
+| Independent launch and native dispatch              | [ChatView](../../apps/web/src/components/ChatView.tsx)                     |
+| Group identities, saved state and submission claims | [compareRunStore](../../apps/web/src/compareRunStore.ts)                   |
+| Live readiness and shared conversation              | [ComparisonFollowUp](../../apps/web/src/components/ComparisonFollowUp.tsx) |
+| Source validation and frozen answer context         | [comparisonFollowUp](../../packages/shared/src/comparisonFollowUp.ts)      |
+| Authoritative command validation                    | [server decider](../../apps/server/src/orchestration/decider.ts)           |
+| Original-answer identity and recovery               | [comparisonSnapshots](../../apps/web/src/comparisonSnapshots.ts)           |
 
-### Reuse native conversations
+## Reliability decisions
 
-Comparison panes retain the application's existing thread lifecycle and provider execution.
-Users can continue a source independently or open its full thread. This preserves native
-activity, approvals and permissions while adding a shared comparison surface.
+**Preserve identity across uncertainty.** A later completed turn is not proof that an earlier
+launch succeeded. Keep original thread/turn identity and completion evidence. See the
+[snapshot regression cases](../../apps/web/src/comparisonSnapshots.test.ts).
 
-### Preserve what an answer actually represents
+**Validate again at send time.** A displayed ready state can become stale. The shared context
+builder checks source identity, project membership, changed state and incomplete history;
+the server validates the command before dispatch. See the
+[shared-context tests](../../packages/shared/src/comparisonFollowUp.test.ts) and
+[server follow-up tests](../../apps/server/src/orchestration/decider.comparisonFollowUp.test.ts).
 
-A saved original answer should not change when its conversation continues. A failed,
-interrupted or unresolved launch should not become a successful answer merely because a
-later turn completed. The snapshot logic records original identity and completion evidence,
-and tests these distinctions explicitly.
+**Make partial results explicit.** Failed or missing sources must not become invented answers.
+When the contract permits using available completed answers, disclose missing sources. With
+no completed answers, sending stays blocked. Preserve drafts and uncertain delivery rather
+than automatically resending. The [requirements](../specs/comparison.md) describe the boundaries.
 
-See [snapshot implementation](../../apps/web/src/comparisonSnapshots.ts) and
-[regression cases](../../apps/web/src/comparisonSnapshots.test.ts), including preservation
-of original answers, unresolved launch evidence, interrupted partial text and undecodable
-saved storage. These tests document intended behavior; release verification identifies
-which checks ran against the published revision.
+**Reuse native controls.** Tools, approvals, permissions and worktree behavior belong to each
+session. Reusing native execution avoids maintaining a second conversation engine, but means
+comparison has to respect existing lifecycle and recovery rules.
 
-### Exercise the interaction with synthetic providers
+## A concrete correction: a failed follow-up must not erase a proven answer
 
-Deterministic providers make it possible to test shared prompts and follow-ups without
-spending provider quota or using private conversations. The README walkthrough contains
-actual app captures with prepared responses and states that limitation explicitly.
-Synthetic fixtures test application behavior; they do not demonstrate model reasoning,
-real-provider reliability or tool-access equivalence.
+The shared context builder previously omitted an earlier completed answer whenever a later
+user request appeared, even when native state confirmed that the new start had failed.
+That conservative rule prevented invented success, but also discarded useful proven context.
 
-## Current limits and next step
+The correction retains the completed turn only with definitive failed-start evidence and no
+pending retry. It labels the frozen context as an earlier completed answer and shows a notice
+in the shared composer. It does not claim the failed request completed or recover arbitrary
+historical text. Regression cases cover retained answers, stale error evidence, pending retries,
+partial results and server-side snapshot validation in the linked tests above.
 
-Comparison groups and preferences are client-local. Clearing site data can remove them.
-The project makes no claim of native mobile parity, every-platform validation or production
-adoption. Source installation is the first distribution path.
+Independent agent review caught a second issue: changing models before the failed request
+could attribute the earlier output to the new selection. The correction explicitly marks the
+earlier model/options as unknown when they cannot be proven and records current thread
+configuration separately. A regression test exercises that changed-configuration case.
 
-The next design iteration will examine how clearly users can start a comparison, understand
-provider state and decide what to do with the answers. Its before/after evidence can extend
-this case study once the changes are implemented and tested.
+## Verification and delivery
+
+The [README walkthrough](../../README.md#a-short-walkthrough) contains actual app captures
+with synthetic providers and prepared answers. Synthetic fixtures support repeatable checks
+without exposing private conversations or consuming provider quota. They do not demonstrate
+live model reasoning. A live-provider demo has not been recorded yet.
+
+[Fork CI](../../.github/workflows/fork-ci.yml) checks formatting, lint, types, web build and
+configured test suites. Its aggregate job fails when a prerequisite does not pass. The name
+of that job alone does not establish that branch protection enforces it. A local test run
+also does not establish hosted CI success for an unpublished revision.
+
+For each change, review the bounded diff, regression evidence and affected runtime behavior.
+Record actual review and known limits in the change description. Follow the
+[contribution policy](../../CONTRIBUTING.md) and [source-release procedure](../operations/release.md).
+Local desktop delivery preserves a previous app and offline data/profile backup for rollback;
+see [desktop operations](../operations/comparison-desktop.md). The fork does not claim an
+automated public desktop deployment pipeline.
+
+## Limits and scaling considerations
+
+This is an early source preview. Comparison groups and preferences are client-local; clearing
+site data can remove them. Providers may differ in tools, permissions, models and context, so
+side-by-side output is not a controlled benchmark. No adoption, productivity, production-scale
+or model-ranking result is claimed.
+
+A multi-user service would need explicit concurrency and quota limits, durable cross-client
+coordination, recovery ownership and operational telemetry. Those are design considerations,
+not capabilities established by this local comparison workflow. The useful evidence here is
+how a bounded orchestration flow handles identity, state changes and partial failure.
