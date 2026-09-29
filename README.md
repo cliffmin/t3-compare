@@ -48,6 +48,12 @@ or [development](docs/operations/development.md) for checks and local desktop bu
 
 ## A short walkthrough
 
+[Watch the 28-second recovery demo](https://github.com/cliffmin/t3-compare/releases/download/compare-source-preview-2026-09-29/reliability-recovery.mp4):
+an independent follow-up fails to start, its proven earlier answer remains available, and a
+shared follow-up completes. This records the actual app with prepared synthetic responses
+and an injected failure. The clip begins after initial answers complete; setup is omitted,
+with no interior cuts or speed changes. No live-provider demo has been recorded.
+
 These are **actual app captures with synthetic providers**, not a model evaluation. Fixture Alpha
 and Fixture Beta are deterministic local stand-ins for the Codex adapter: both use
 `fixture-model`, medium reasoning, Full access and the same disposable current checkout.

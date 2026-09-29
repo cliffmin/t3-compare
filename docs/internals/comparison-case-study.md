@@ -86,7 +86,10 @@ configuration separately. A regression test exercises that changed-configuration
 The [README walkthrough](../../README.md#a-short-walkthrough) contains actual app captures
 with synthetic providers and prepared answers. Synthetic fixtures support repeatable checks
 without exposing private conversations or consuming provider quota. They do not demonstrate
-live model reasoning. A live-provider demo has not been recorded yet.
+live model reasoning. A live-provider demo has not been recorded yet. The
+[28-second recovery recording](https://github.com/cliffmin/t3-compare/releases/download/compare-source-preview-2026-09-29/reliability-recovery.mp4)
+shows the failed-start correction in the actual app, using prepared responses and an injected
+failure. Setup is trimmed; the remaining sequence runs at original speed without interior cuts.
 
 [Fork CI](../../.github/workflows/fork-ci.yml) checks formatting, lint, types, web build and
 configured test suites. Its aggregate job fails when a prerequisite does not pass. The name
